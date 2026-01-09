@@ -44,7 +44,7 @@ def scrape_reddit_rss(query):
         # Save
         if posts:
             df = pd.DataFrame(posts)
-            filename = f"data/raw/sentimentData/{query}_reddit.csv"
+            filename = f"data/raw/sentimentData/ {query}_reddit.csv"
             df.to_csv(filename, index=False)
             print(f"✅ Success! Saved {len(df)} posts to {filename}")
             return df
