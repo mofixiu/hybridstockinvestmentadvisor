@@ -3,3 +3,18 @@ __pycache__/
 .DS_Store
 *.csv
 *.pkl
+
+# Large model files
+models/naija_finbert/
+models/*.pkl
+models/*.bin
+models/*.pt
+
+# Large data files
+data/live/
+data/processed/
+data/raw/
+
+# Python cache
+__pycache__/
+*.pyc

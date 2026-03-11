@@ -260,26 +260,29 @@ import datetime # Make sure this is imported!
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # --- 1. LINK THE SCRAPERS ---
-# This allows Python to find your scrapers folder
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scrapers')))
+# Point Python to the absolute root folder (HybStockAdvisor)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(PROJECT_ROOT)
 
 try:
-    # Assuming these functions take a 'ticker' and return a list of strings (e.g., ["GTCO is mooning!", "Market cast"])
-    from nairaland_scraper import scrape_nairaland
-    from reddit_scraper import scrape_reddit
-    from twitter_mock import scrape_twitter_mock
-except ImportError:
-    print("⚠️  Warning: Scraper files not found in src/scrapers/ or function names don't match.")
-    print("Please ensure you have scrape_nairaland, scrape_reddit, and scrape_twitter_mock defined.")
+    from src.scrapers.nairaland_scraper import scrape_nairaland
+    from src.scrapers.reddit_scraper import scrape_reddit
+    from src.scrapers.twitter_mock import scrape_twitter_mock
+except ImportError as e:
+    print(f"⚠️ Warning: Could not import scrapers. Details: {e}")
 
 # --- 2. INITIALIZE SERVICES ---
 tv = TvDatafeed()
 
-NGX_STOCKS = [
-    "GTCO", "DANGCEM", "MTNN", "BUAFOODS", "BUACEMENT", 
-    "SEPLAT", "ZENITHBANK", "WAPCO", "ARADEL", "AIRTELAFRI", "ACCESSCORP", "NAHCO", "FCMB", "UBA", "BUAFOODS", "NESTLE", "NB", "OANDO", "PRESCO", "STANBIC", "UNILEVER", "FIRSTHOLDCO", "NB","OKOMUOIL",
-]
 
+NGX_STOCKS = [
+ "AIRTELAFRI","MTNN","BUAFOODS","DANGCEM","ARADEL",
+   "SEPLAT","GTCO","ZENITHBANK","WAPCO","PRESCO",
+   "INTBREW","NB","NESTLE","FIRSTHOLDCO","TRANSPOWER",
+   "UBA","STANBIC","TRANSCOHOT","OKOMUOIL","ACCESSCORP",
+     "WEMABANK","DANGSUGAR","GUINNESS","FCMB", "NAHCO",
+       "BUACEMENT",   "OANDO",   "UNILEVER","GEREGU","FIDELITYBK"
+]
 # Load NLP Model globally so it only boots up once!
 print("🧠 Booting up Naija-FinBERT NLP Engine...")
 try:
@@ -413,12 +416,84 @@ def get_todays_sentiment(ticker):
     final_sentiment = sum(scores) / len(scores)
     return round(final_sentiment, 4)
 # --- 4. TECHNICALS & BUSINESS LOGIC ---
+# def calculate_indicators(df):
+#     # RSI (14 days)
+#     delta = df['close'].diff()
+#     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+#     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    
+#     rs = gain / loss
+#     df['RSI'] = 100 - (100 / (1 + rs))
+    
+#     # 🚨 THE ILLIQUIDITY FIX 🚨
+#     # If a stock doesn't move for 14 days, gain=0 and loss=0 (0/0 = NaN).
+#     # A perfectly flat stock is perfectly neutral, so we force the RSI to 50.
+#     df.loc[(gain == 0) & (loss == 0), 'RSI'] = 50
+#     df['RSI'] = df['RSI'].fillna(50)
+
+#     df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
+#     df['EMA_200'] = df['close'].ewm(span=200, adjust=False).mean()
+
+#     ema_12 = df['close'].ewm(span=12, adjust=False).mean()
+#     ema_26 = df['close'].ewm(span=26, adjust=False).mean()
+#     df['MACD_12_26_9'] = ema_12 - ema_26
+#     df['MACDs_12_26_9'] = df['MACD_12_26_9'].ewm(span=9, adjust=False).mean() 
+#     df['MACDh_12_26_9'] = df['MACD_12_26_9'] - df['MACDs_12_26_9']
+    
+#     df['BBM_20_2.0_2.0'] = df['close'].rolling(window=20).mean()
+#     std = df['close'].rolling(window=20).std()
+#     df['BBU_20_2.0_2.0'] = df['BBM_20_2.0_2.0'] + (std * 2)
+#     df['BBL_20_2.0_2.0'] = df['BBM_20_2.0_2.0'] - (std * 2)
+#     df['BBB_20_2.0_2.0'] = (df['BBU_20_2.0_2.0'] - df['BBL_20_2.0_2.0']) / df['BBM_20_2.0_2.0'] * 100
+#     df['BBP_20_2.0_2.0'] = (df['close'] - df['BBL_20_2.0_2.0']) / (df['BBU_20_2.0_2.0'] - df['BBL_20_2.0_2.0'])
+
+#     return df
+
+# def generate_safety_index(ticker, df):
+#     model = joblib.load("models/best_stock_model_optimized.pkl")
+    
+#     feature_cols = ['RSI', 'EMA_50', 'EMA_200', 'avg_sentiment']
+#     for col in df.columns:
+#         if any(x in col for x in ['MACD', 'BBL', 'BBM', 'BBU']):
+#             feature_cols.append(col)
+            
+#     X = df[feature_cols]
+    
+#     df['AI_Score'] = model.predict_proba(X)[:, 1] * 100 
+#     df['Stability_Score'] = 100 - (abs(df['RSI'] - 50) * 2)
+#     df['Stability_Score'] = df['Stability_Score'].clip(lower=0)
+#     df['Sentiment_Rescaled'] = (df['avg_sentiment'] + 1) * 50
+    
+#     df['Safety_Index'] = (
+#         (df['AI_Score'] * 0.50) + 
+#         (df['Stability_Score'] * 0.30) + 
+#         (df['Sentiment_Rescaled'] * 0.20)
+#     )
+    
+#     def get_signal(score):
+#         if score >= 80: return "STRONG BUY 🟢"
+#         elif score >= 60: return "BUY 🟢"
+#         elif score >= 40: return "HOLD 🟡"
+#         else: return "SELL 🔴"
+        
+#     df['Recommendation'] = df['Safety_Index'].apply(get_signal)
+    
+#     df.to_csv(f"data/processed/{ticker}_SAFETY_INDEX.csv", index=False)
+#     print(f"   📊 Final Advice: {df['Recommendation'].iloc[-1]}")
 def calculate_indicators(df):
+    # RSI (14 days)
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # 🚨 THE ILLIQUIDITY FIX 🚨
+    # If a stock doesn't move for 14 days, gain=0 and loss=0 (0/0 = NaN).
+    # A perfectly flat stock is perfectly neutral, so we force the RSI to 50.
+    df.loc[(gain == 0) & (loss == 0), 'RSI'] = 50
+    df['RSI'] = df['RSI'].fillna(50)
 
     df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['close'].ewm(span=200, adjust=False).mean()
@@ -448,28 +523,81 @@ def generate_safety_index(ticker, df):
             
     X = df[feature_cols]
     
+    # Base Component Scores
     df['AI_Score'] = model.predict_proba(X)[:, 1] * 100 
     df['Stability_Score'] = 100 - (abs(df['RSI'] - 50) * 2)
     df['Stability_Score'] = df['Stability_Score'].clip(lower=0)
     df['Sentiment_Rescaled'] = (df['avg_sentiment'] + 1) * 50
     
+    # 1. The Raw Formula
     df['Safety_Index'] = (
         (df['AI_Score'] * 0.50) + 
         (df['Stability_Score'] * 0.30) + 
         (df['Sentiment_Rescaled'] * 0.20)
     )
     
+    # 🚨 2. NEW: FINANCIAL GUARDRAILS (Overrides the AI if technicals look bad) 🚨
+    
+    # RSI Guardrails
+    # If RSI > 70 (Overbought - people are buying too much, a crash is likely), penalize the score by 15 points
+    df.loc[df['RSI'] > 70, 'Safety_Index'] -= 15
+    # If RSI < 30 (Oversold - people panicked, it's cheap), boost the score by 10 points
+    df.loc[df['RSI'] < 30, 'Safety_Index'] += 10
+    
+    # Moving Average Guardrails (Golden Cross vs Death Cross)
+    # If 50-day is below 200-day (Bearish/Death Cross territory), penalize by 10 points
+    df.loc[df['EMA_50'] < df['EMA_200'], 'Safety_Index'] -= 10
+    # If 50-day is above 200-day (Bullish/Golden Cross territory), boost by 5 points
+    df.loc[df['EMA_50'] > df['EMA_200'], 'Safety_Index'] += 5
+    
+    # Force the final score to stay neatly between 0 and 100
+    df['Safety_Index'] = df['Safety_Index'].clip(0, 100)
+    
+    # 3. Stricter Thresholds for the UI (Makes "Buys" harder to get)
     def get_signal(score):
         if score >= 80: return "STRONG BUY 🟢"
-        elif score >= 60: return "BUY 🟢"
-        elif score >= 40: return "HOLD 🟡"
+        elif score >= 65: return "BUY 🟢"    # Raised boundary from 60 to 65
+        elif score >= 45: return "HOLD 🟡"   # Raised boundary from 40 to 45
         else: return "SELL 🔴"
         
     df['Recommendation'] = df['Safety_Index'].apply(get_signal)
     
     df.to_csv(f"data/processed/{ticker}_SAFETY_INDEX.csv", index=False)
-    print(f"   📊 Final Advice: {df['Recommendation'].iloc[-1]}")
-
+    
+    # Updated print statement to show you exactly what score it landed on
+    print(f"   📊 Final Advice: {df['Recommendation'].iloc[-1]} (Score: {df['Safety_Index'].iloc[-1]:.1f})")
+    
+# def fetch_live_data():
+#     print("🔄 Starting Full Multi-Modal Pipeline (Prices + AI + NLP)...")
+#     os.makedirs("data/live", exist_ok=True)
+#     os.makedirs("data/processed", exist_ok=True)
+    
+#     for ticker in NGX_STOCKS:
+#         print(f"\n📥 Processing {ticker}...")
+#         try:
+#             time.sleep(5) # Prevent TradingView block
+            
+#             df = tv.get_hist(symbol=ticker, exchange='NSENG', interval=Interval.in_daily, n_bars=250)
+            
+#             if df is None or df.empty:
+#                 print(f"   ⚠️ No data found. Skipping.")
+#                 continue
+                
+#             df = df.reset_index().rename(columns={"datetime": "date"})
+#             df = calculate_indicators(df).dropna().copy()
+            
+#             # THE REAL NLP PIPELINE FIRES HERE
+#             today_sentiment = get_todays_sentiment(ticker)
+#             df['avg_sentiment'] = today_sentiment 
+#             print(f"   🐦 Live NLP Sentiment: {today_sentiment}")
+            
+#             df.to_csv(f"data/live/{ticker}_LIVE.csv", index=False)
+#             generate_safety_index(ticker, df)
+            
+#         except Exception as e:
+#             print(f"   ❌ Error processing {ticker}: {e}")
+            
+#     print("\n✅ End-to-End Pipeline Complete! System is fully synced.")
 def fetch_live_data():
     print("🔄 Starting Full Multi-Modal Pipeline (Prices + AI + NLP)...")
     os.makedirs("data/live", exist_ok=True)
@@ -477,15 +605,36 @@ def fetch_live_data():
     
     for ticker in NGX_STOCKS:
         print(f"\n📥 Processing {ticker}...")
-        try:
-            time.sleep(5) # Prevent TradingView block
-            
-            df = tv.get_hist(symbol=ticker, exchange='NSENG', interval=Interval.in_daily, n_bars=250)
-            
-            if df is None or df.empty:
-                print(f"   ⚠️ No data found. Skipping.")
-                continue
+        
+        # --- THE NEW RETRY LOGIC ---
+        max_retries = 3
+        df = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Wait longer on each retry to let TradingView's server cool down
+                sleep_time = 5 + (attempt * 3) 
+                time.sleep(sleep_time) 
                 
+                df = tv.get_hist(symbol=ticker, exchange='NSENG', interval=Interval.in_daily, n_bars=250)
+                
+                # If we got data, break out of the retry loop!
+                if df is not None and not df.empty:
+                    break 
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️ Network hiccup. Retrying {ticker} (Attempt {attempt+2}/{max_retries})...")
+                else:
+                    print(f"   ❌ Failed after 3 attempts: {e}")
+        # ---------------------------
+
+        if df is None or df.empty:
+            print(f"   ⏭️ Skipping {ticker} - Could not establish connection.")
+            continue
+            
+        try:
+            # Data Formatting
             df = df.reset_index().rename(columns={"datetime": "date"})
             df = calculate_indicators(df).dropna().copy()
             
@@ -494,13 +643,13 @@ def fetch_live_data():
             df['avg_sentiment'] = today_sentiment 
             print(f"   🐦 Live NLP Sentiment: {today_sentiment}")
             
+            # Save and Score
             df.to_csv(f"data/live/{ticker}_LIVE.csv", index=False)
             generate_safety_index(ticker, df)
             
         except Exception as e:
-            print(f"   ❌ Error processing {ticker}: {e}")
+            print(f"   ❌ Error processing {ticker} data: {e}")
             
     print("\n✅ End-to-End Pipeline Complete! System is fully synced.")
-
 if __name__ == "__main__":
     fetch_live_data()
