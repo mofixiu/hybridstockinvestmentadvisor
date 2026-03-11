@@ -6,7 +6,9 @@ __pycache__/
 
 # Large model files
 models/naija_finbert/
+models/naija_finbert_results/
 models/*.pkl
+models/*.safetensors
 models/*.bin
 models/*.pt
 
