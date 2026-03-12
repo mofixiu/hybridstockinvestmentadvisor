@@ -276,12 +276,16 @@ tv = TvDatafeed()
 
 
 NGX_STOCKS = [
- "AIRTELAFRI","MTNN","BUAFOODS","DANGCEM","ARADEL",
-   "SEPLAT","GTCO","ZENITHBANK","WAPCO","PRESCO",
-   "INTBREW","NB","NESTLE","FIRSTHOLDCO","TRANSPOWER",
-   "UBA","STANBIC","TRANSCOHOT","OKOMUOIL","ACCESSCORP",
-     "WEMABANK","DANGSUGAR","GUINNESS","FCMB", "NAHCO",
-       "BUACEMENT",   "OANDO",   "UNILEVER","GEREGU","FIDELITYBK"
+"AIRTELAFRI","MTNN","BUAFOODS","DANGCEM","ARADEL",
+"SEPLAT","GTCO","ZENITHBANK","WAPCO","PRESCO",
+"INTBREW","NB","NESTLE","FIRSTHOLDCO","TRANSPOWER",
+"UBA","STANBIC","TRANSCOHOT","OKOMUOIL","ACCESSCORP",
+"FBNH","ETI","DANGSUGAR","TRANSCORP",
+"GUINNESS","FCMB","NAHCO","CUSTODIAN","JBERGER",
+"NGXGROUP","NASCON","STERLINGNG","BUACEMENT","UCAP",
+"OANDO","PZ","MECURE","TOTAL","HONYFLOUR",
+"ETRANZACT","UNILEVER","GEREGU","FIDELITYBK",
+"CHAMS","ABBEYBDS","AIICO","JOHNHOLT","JAIZBANK","FIDSON","SKYAVN"
 ]
 # Load NLP Model globally so it only boots up once!
 print("🧠 Booting up Naija-FinBERT NLP Engine...")
@@ -598,6 +602,77 @@ def generate_safety_index(ticker, df):
 #             print(f"   ❌ Error processing {ticker}: {e}")
             
 #     print("\n✅ End-to-End Pipeline Complete! System is fully synced.")
+# --- METADATA ENGINE ---
+COMPANY_METADATA = {
+    "AIRTELAFRI": {"name": "Airtel Africa Plc", "shares": 3_758_151_504},
+    "MTNN": {"name": "MTN Nigeria Communications PLC", "shares": 20_354_513_050},
+    "BUAFOODS": {"name": "BUA Foods PLC", "shares": 18_000_000_000},
+    "DANGCEM": {"name": "Dangote Cement Plc", "shares": 17_040_507_404},
+    "ARADEL": {"name": "Aradel Holdings Plc", "shares": 4_340_000_000},
+    "SEPLAT": {"name": "Seplat Energy Plc", "shares": 588_444_561},
+    "GTCO": {"name": "Guaranty Trust Holding Company Plc", "shares": 29_431_179_224},
+    "ZENITHBANK": {"name": "Zenith Bank Plc", "shares": 31_396_493_786},
+    "WAPCO": {"name": "Lafarge Africa Plc", "shares": 16_107_795_721},
+    "PRESCO": {"name": "Presco Plc", "shares": 1_000_000_000},
+    "INTBREW": {"name": "International Breweries Plc", "shares": 26_862_069_000},
+    "NB": {"name": "Nigerian Breweries Plc", "shares": 10_276_132_378},
+    "NESTLE": {"name": "Nestlé Nigeria Plc", "shares": 792_656_252},
+    "FIRSTHOLDCO": {"name": "FBN Holdings Plc", "shares": 35_895_292_792}, 
+    "FBNH": {"name": "FBN Holdings Plc", "shares": 35_895_292_792},
+    "TRANSPOWER": {"name": "Transcorp Power Plc", "shares": 7_500_000_000},
+    "UBA": {"name": "United Bank for Africa Plc", "shares": 34_199_421_368},
+    "STANBIC": {"name": "Stanbic IBTC Holdings PLC", "shares": 12_956_997_163},
+    "TRANSCOHOT": {"name": "Transcorp Hotels Plc", "shares": 10_242_528_411},
+    "OKOMUOIL": {"name": "The Okomu Oil Palm Company Plc", "shares": 953_910_000},
+    "ACCESSCORP": {"name": "Access Holdings Plc", "shares": 35_545_225_622},
+    "ETI": {"name": "Ecobank Transnational Incorporated", "shares": 18_349_551_215},
+    "DANGSUGAR": {"name": "Dangote Sugar Refinery Plc", "shares": 12_146_878_241},
+    "TRANSCORP": {"name": "Transnational Corporation Plc", "shares": 40_647_990_293},
+    "GUINNESS": {"name": "Guinness Nigeria Plc", "shares": 2_190_382_819},
+    "FCMB": {"name": "FCMB Group Plc", "shares": 19_802_710_754},
+    "NAHCO": {"name": "Nigerian Aviation Handling Company Plc", "shares": 1_949_394_828},
+    "CUSTODIAN": {"name": "Custodian Investment Plc", "shares": 5_881_864_195},
+    "JBERGER": {"name": "Julius Berger Nigeria Plc", "shares": 1_600_000_000},
+    "NGXGROUP": {"name": "Nigerian Exchange Group Plc", "shares": 1_964_115_918},
+    "NASCON": {"name": "NASCON Allied Industries Plc", "shares": 2_649_438_378},
+    "STERLINGNG": {"name": "Sterling Financial Holdings Plc", "shares": 28_790_418_124},
+    "BUACEMENT": {"name": "BUA Cement Plc", "shares": 33_864_354_060},
+    "UCAP": {"name": "United Capital Plc", "shares": 6_000_000_000},
+    "OANDO": {"name": "Oando Plc", "shares": 12_431_412_481},
+    "PZ": {"name": "PZ Cussons Nigeria Plc", "shares": 3_970_477_045},
+    "MECURE": {"name": "MeCure Industries Plc", "shares": 4_000_000_000},
+    "TOTAL": {"name": "TotalEnergies Marketing Nigeria Plc", "shares": 339_521_837},
+    "HONYFLOUR": {"name": "Honeywell Flour Mill Plc", "shares": 7_930_197_658},
+    "ETRANZACT": {"name": "eTranzact International Plc", "shares": 4_200_000_000},
+    "UNILEVER": {"name": "Unilever Nigeria Plc", "shares": 5_745_005_417},
+    "GEREGU": {"name": "Geregu Power Plc", "shares": 2_500_000_000},
+    "FIDELITYBK": {"name": "Fidelity Bank Plc", "shares": 32_012_096_197},
+    "CHAMS": {"name": "Chams Holding Company Plc", "shares": 4_696_060_000},
+    "ABBEYBDS": {"name": "Abbey Mortgage Bank Plc", "shares": 10_153_846_154},
+    "AIICO": {"name": "AIICO Insurance Plc", "shares": 36_600_000_000},
+    "JOHNHOLT": {"name": "John Holt Plc", "shares": 389_151_412},
+    "JAIZBANK": {"name": "Jaiz Bank Plc", "shares": 34_541_172_377},
+    "FIDSON": {"name": "Fidson Healthcare Plc", "shares": 2_286_283_530},
+    "SKYAVN": {"name": "Skyway Aviation Handling Co Plc", "shares": 1_353_580_000},
+    "WEMABANK": {"name": "Wema Bank Plc", "shares": 12_858_155_360}
+}
+def get_dynamic_metadata(ticker, current_price):
+    """Calculates real-time Market Cap using outstanding shares."""
+    # Fallback to 1 billion shares if you haven't added the stock to the dictionary yet
+    meta = COMPANY_METADATA.get(ticker, {"name": f"{ticker} Plc", "shares": 1_000_000_000})
+    
+    name = meta["name"]
+    market_cap_raw = current_price * meta["shares"]
+    
+    if market_cap_raw >= 1_000_000_000_000:
+        formatted_cap = f"{market_cap_raw / 1_000_000_000_000:.2f}T"
+    elif market_cap_raw >= 1_000_000_000:
+        formatted_cap = f"{market_cap_raw / 1_000_000_000:.2f}B"
+    else:
+        formatted_cap = f"{market_cap_raw / 1_000_000:.2f}M"
+        
+    return name, formatted_cap
+# ==========================================================
 def fetch_live_data():
     print("🔄 Starting Full Multi-Modal Pipeline (Prices + AI + NLP)...")
     os.makedirs("data/live", exist_ok=True)
@@ -607,7 +682,7 @@ def fetch_live_data():
         print(f"\n📥 Processing {ticker}...")
         
         # --- THE NEW RETRY LOGIC ---
-        max_retries = 3
+        max_retries = 5
         df = None
         
         for attempt in range(max_retries):
@@ -626,13 +701,29 @@ def fetch_live_data():
                 if attempt < max_retries - 1:
                     print(f"   ⚠️ Network hiccup. Retrying {ticker} (Attempt {attempt+2}/{max_retries})...")
                 else:
-                    print(f"   ❌ Failed after 3 attempts: {e}")
+                    print(f"   ❌ Failed after 5 attempts: {e}")
         # ---------------------------
 
         if df is None or df.empty:
             print(f"   ⏭️ Skipping {ticker} - Could not establish connection.")
             continue
             
+        # try:
+        #     # Data Formatting
+        #     df = df.reset_index().rename(columns={"datetime": "date"})
+        #     df = calculate_indicators(df).dropna().copy()
+            
+        #     # THE REAL NLP PIPELINE FIRES HERE
+        #     today_sentiment = get_todays_sentiment(ticker)
+        #     df['avg_sentiment'] = today_sentiment 
+        #     print(f"   🐦 Live NLP Sentiment: {today_sentiment}")
+            
+        #     # Save and Score
+        #     df.to_csv(f"data/live/{ticker}_LIVE.csv", index=False)
+        #     generate_safety_index(ticker, df)
+            
+        # except Exception as e:
+        #     print(f"   ❌ Error processing {ticker} data: {e}")
         try:
             # Data Formatting
             df = df.reset_index().rename(columns={"datetime": "date"})
@@ -643,13 +734,19 @@ def fetch_live_data():
             df['avg_sentiment'] = today_sentiment 
             print(f"   🐦 Live NLP Sentiment: {today_sentiment}")
             
+            # 🚨 DYNAMIC MARKET CAP CALCULATION 🚨
+            current_price = df['close'].iloc[-1] # Grab today's live price
+            company_name, market_cap = get_dynamic_metadata(ticker, current_price)
+            df['Name'] = company_name
+            df['Market_Cap'] = market_cap
+            print(f"   🏢 Calc Mkt Cap: {market_cap}")
+            
             # Save and Score
             df.to_csv(f"data/live/{ticker}_LIVE.csv", index=False)
             generate_safety_index(ticker, df)
             
         except Exception as e:
-            print(f"   ❌ Error processing {ticker} data: {e}")
-            
+            print(f"   ❌ Error processing {ticker} data: {e}") 
     print("\n✅ End-to-End Pipeline Complete! System is fully synced.")
 if __name__ == "__main__":
     fetch_live_data()

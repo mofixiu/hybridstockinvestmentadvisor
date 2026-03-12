@@ -142,6 +142,7 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
         "user_data": {
             "id": db_user.id,
             "first_name": db_user.first_name,
+            "last_name": db_user.last_name,  
             "username": db_user.username,
             "email": db_user.email
         }
@@ -226,11 +227,53 @@ def get_forecast(ticker: str):
         print(f"API CRASH ERROR: {e}") 
         return {"status": "error", "error": str(e)}
 
+# @app.get("/api/summary")
+# def get_market_summary():
+#     """Returns the latest price and 24h change for all analyzed stocks in one call."""
+#     processed_dir = "data/processed"
+#     summary = []
+    
+#     if not os.path.exists(processed_dir):
+#         return {"status": "error", "message": "No processed data found"}
+        
+#     for file in os.listdir(processed_dir):
+#         if file.endswith("_SAFETY_INDEX.csv"):
+#             ticker = file.replace("_SAFETY_INDEX.csv", "")
+#             try:
+#                 df = pd.read_csv(os.path.join(processed_dir, file))
+#                 if not df.empty:
+#                     latest = df.iloc[-1]
+#                     # Get yesterday to calculate the percentage change
+#                     prev = df.iloc[-2] if len(df) > 1 else latest
+#                     price = float(latest['close'])
+#                     prev_price = float(prev['close'])
+                    
+#                     change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
+                    
+#                     summary.append({
+#                         "symbol": ticker,
+#                         "price": price,
+#                         "change_pct": change_pct
+#                     })
+#             except Exception as e:
+#                 continue
+                
+#     return {"status": "success", "data": summary}
 @app.get("/api/summary")
 def get_market_summary():
-    """Returns the latest price and 24h change for all analyzed stocks in one call."""
+    """Returns the latest price, 24h change, Name, and Market Cap for all analyzed stocks."""
     processed_dir = "data/processed"
     summary = []
+    
+    # A tiny fallback dictionary just in case your CSVs don't have the 'Name' column yet
+    fallback_names = {
+        "GTCO": "Guaranty Trust Holding",
+        "ZENITHBANK": "Zenith Bank Plc",
+        "UBA": "United Bank for Africa",
+        "DANGCEM": "Dangote Cement",
+        "MTNN": "MTN Nigeria",
+        "WEMABANK": "Wema Bank Plc"
+    }
     
     if not os.path.exists(processed_dir):
         return {"status": "error", "message": "No processed data found"}
@@ -242,15 +285,23 @@ def get_market_summary():
                 df = pd.read_csv(os.path.join(processed_dir, file))
                 if not df.empty:
                     latest = df.iloc[-1]
-                    # Get yesterday to calculate the percentage change
                     prev = df.iloc[-2] if len(df) > 1 else latest
                     price = float(latest['close'])
                     prev_price = float(prev['close'])
                     
                     change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
                     
+                    # # Safely grab Name and Market Cap (Defaults to N/A if you haven't scraped it yet)
+                    # latest_dict = latest.to_dict()
+                    # company_name = latest_dict.get('Name', fallback_names.get(ticker, f"{ticker} Plc"))
+                    # market_cap = latest_dict.get('Market_Cap', "N/A")
+                    latest_dict = latest.to_dict()
+                    company_name = latest_dict.get('Name', f"{ticker} Plc")
+                    market_cap = latest_dict.get('Market_Cap', "--")
                     summary.append({
                         "symbol": ticker,
+                        "name": str(company_name),
+                        "market_cap": str(market_cap),
                         "price": price,
                         "change_pct": change_pct
                     })
@@ -258,7 +309,6 @@ def get_market_summary():
                 continue
                 
     return {"status": "success", "data": summary}
-    
 
 @app.post("/api/portfolio/add")
 def add_to_portfolio(item: PortfolioCreate, db: Session = Depends(get_db)):
