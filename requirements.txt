@@ -6,5 +6,6 @@ sqlalchemy
 pymysql
 PyJWT
 passlib[bcrypt]
+bcrypt==3.2.2
 python-dotenv
 google-genai
