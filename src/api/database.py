@@ -31,18 +31,22 @@
 #         yield db
 #     finally:
 #         db.close()
+import os
 from sqlalchemy import create_engine, Column, Integer, String, Float, TIMESTAMP, text, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import DateTime # Add DateTime to your imports at the top!
+from sqlalchemy import DateTime 
+from dotenv import load_dotenv
 
-# 1. Connection String for Local MySQL
-DATABASE_URL = "mysql+pymysql://root:david001@127.0.0.1:3306/hybstockadvisor"
+# Load environment variables from your .env file
+load_dotenv()
+
+# 1. Connection String (Now pulls securely from your .env file!)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-
 # 2. Python Representation of your MySQL 'users' Table
 class User(Base):
     __tablename__ = "users"

@@ -1141,22 +1141,105 @@ def get_user_assets(user_id: int, db: Session = Depends(get_db), current_user: U
     return {"status": "success", "data": {"portfolio": portfolio_list, "watchlist": watchlist_list}}
 
 # --- CHATBOT ---
+# @app.post("/api/chat")
+# def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+#     user_message = req.text.upper()
+#     context_data = ""
+#     processed_dir = "data/processed"
+    
+#     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
+#     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
+    
+#     portfolio_tickers = [p.ticker for p in portfolio_db]
+#     watchlist_tickers = [w.ticker for w in watchlist_db]
+    
+#     target_tickers = set()
+#     if req.current_ticker: target_tickers.add(req.current_ticker.upper())
+#     for t in portfolio_tickers: target_tickers.add(t.upper())
+#     for t in watchlist_tickers: target_tickers.add(t.upper())
+        
+#     if os.path.exists(processed_dir):
+#         for file in os.listdir(processed_dir):
+#             if file.endswith("_SAFETY_INDEX.csv"):
+#                 ticker = file.replace("_SAFETY_INDEX.csv", "")
+#                 if ticker in user_message:
+#                     target_tickers.add(ticker)
+
+#     for ticker in target_tickers:
+#         file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
+#         if os.path.exists(file_path):
+#             try:
+#                 df = pd.read_csv(file_path)
+#                 latest = df.iloc[-1]
+                
+#                 status_tags = []
+#                 if ticker == req.current_ticker: status_tags.append("Currently on screen")
+#                 if ticker in portfolio_tickers: status_tags.append("In User's Portfolio")
+#                 if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
+#                 tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
+                
+#                 context_data += f"\nData for {ticker}{tag_str}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
+#                 context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
+#                 context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
+#                 context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
+#             except Exception:
+#                 pass
+    
+#     system_prompt = f"""
+#     You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
+#     You are talking to {current_user.first_name}. Address them by name naturally.
+    
+#     Here is the live mathematical data for the stocks the user owns, watches, or is currently asking about:
+#     {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
+    
+#     CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
+#     If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
+#     1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
+#     2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
+#     3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
+#     4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
+    
+#     GENERAL RULES:
+#     - Never invent fake prices or metrics. Rely solely on the context provided.
+#     - If the data says "BUY", explain it using the positive metrics provided.
+#     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
+#     - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer.
+#     """
+    
+#     try:
+#         client = genai.Client(api_key=GEMINI_API_KEY)
+#         response = client.models.generate_content(
+#             model='gemini-2.5-flash',
+#             contents=req.text,
+#             config=types.GenerateContentConfig(system_instruction=system_prompt)
+#         )
+#         return {"status": "success", "reply": response.text}
+        
+#     except Exception as e:
+#         error_msg = str(e)
+#         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+#             return {"status": "error", "reply": "I am receiving a lot of questions right now 🫩! Please wait about 60 seconds and ask me again."}
+#         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
 @app.post("/api/chat")
 def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     user_message = req.text.upper()
     context_data = ""
     processed_dir = "data/processed"
     
+    # 1. Fetch the User's Database Records
     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
     
-    portfolio_tickers = [p.ticker for p in portfolio_db]
+    # 🚨 NEW: Create a dictionary mapping the ticker to their purchase data
+    portfolio_details = {p.ticker: {"quantity": p.quantity, "avg_buy_price": p.average_buy_price} for p in portfolio_db}
+    
+    portfolio_tickers = list(portfolio_details.keys())
     watchlist_tickers = [w.ticker for w in watchlist_db]
     
     target_tickers = set()
     if req.current_ticker: target_tickers.add(req.current_ticker.upper())
-    for t in portfolio_tickers: target_tickers.add(t)
-    for t in watchlist_tickers: target_tickers.add(t)
+    for t in portfolio_tickers: target_tickers.add(t.upper())
+    for t in watchlist_tickers: target_tickers.add(t.upper())
         
     if os.path.exists(processed_dir):
         for file in os.listdir(processed_dir):
@@ -1165,6 +1248,7 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
                 if ticker in user_message:
                     target_tickers.add(ticker)
 
+    # 2. Build the Data Context for Gemini
     for ticker in target_tickers:
         file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
         if os.path.exists(file_path):
@@ -1178,7 +1262,18 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
                 if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
                 tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
                 
-                context_data += f"\nData for {ticker}{tag_str}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
+                # 🚨 NEW: Inject their specific purchase data directly into Lexi's brain!
+                ownership_str = ""
+                if ticker in portfolio_details:
+                    qty = portfolio_details[ticker]['quantity']
+                    buy_price = portfolio_details[ticker]['avg_buy_price']
+                    current_price = float(latest['close'])
+                    
+                    # Calculate profit/loss percentage for her
+                    profit_loss = ((current_price - float(buy_price)) / float(buy_price)) * 100 if buy_price > 0 else 0
+                    ownership_str = f" [USER OWNS: {qty} units. BOUGHT AT: ₦{buy_price:.2f}. CURRENT RETURN: {profit_loss:.2f}%]"
+                
+                context_data += f"\nData for {ticker}{tag_str}:{ownership_str} Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
                 context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
                 context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
                 context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
@@ -1203,7 +1298,7 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
     - Never invent fake prices or metrics. Rely solely on the context provided.
     - If the data says "BUY", explain it using the positive metrics provided.
     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
-    - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer.
+    - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer. You can reference their exact profit/loss.
     """
     
     try:
@@ -1218,9 +1313,8 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            return {"status": "error", "reply": "I am receiving a lot of questions right now 🫩! Please wait about 60 seconds and ask me again."}
+            return {"status": "error", "reply": "I am receiving a lot of questions right now! Please wait about 60 seconds and ask me again."}
         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
-
 # --- Password Reset Functions ---
 def send_otp_email(receiver_email: str, user_first_name: str, otp_code: str):
     SENDER_EMAIL = os.getenv("EMAIL_SENDER", "your_email@gmail.com")

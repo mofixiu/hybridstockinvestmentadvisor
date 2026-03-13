@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+numpy
+sqlalchemy
+pymysql
+PyJWT
+passlib[bcrypt]
+python-dotenv
+google-genai
