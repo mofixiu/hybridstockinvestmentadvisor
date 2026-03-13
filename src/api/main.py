@@ -585,7 +585,6 @@
     
 #     # 4. Call Gemini
 #     try:
-#         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyAplxYC0QRP2bzCIgd3p273RsEiiLoHzPg"))
 #         response = client.models.generate_content(
 #             model='gemini-2.5-flash',
 #             contents=req.text,
@@ -717,7 +716,6 @@
 #     # # 5. Call Gemini using the NEW SDK
 #     # try:
 #     #     # Initialize the new client with your API key
-#     #     client = genai.Client(api_key="AIzaSyAplxYC0QRP2bzCIgd3p273RsEiiLoHzPg")
         
 #     #     # Send the request using the new configuration format
 #     #     response = client.models.generate_content(
@@ -867,10 +865,16 @@ from src.api.database import PasswordReset, get_db, User, Portfolio, Watchlist
 
 # --- 🚨 ENVIRONMENT & SECURITY SETUP 🚨 ---
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAplxYC0QRP2bzCIgd3p273RsEiiLoHzPg")
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "hybstockadvisor_super_secret_defense_key_2026")
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 Days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 Days
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY in environment")
+if not SECRET_KEY:
+    raise RuntimeError("Missing JWT_SECRET_KEY in environment")
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -1214,7 +1218,7 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            return {"status": "error", "reply": "I am receiving a lot of questions right now! Please wait about 60 seconds and ask me again."}
+            return {"status": "error", "reply": "I am receiving a lot of questions right now 🫩! Please wait about 60 seconds and ask me again."}
         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
 
 # --- Password Reset Functions ---
