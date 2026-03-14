@@ -844,6 +844,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 import pandas as pd
 import numpy as np
 import os
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -919,7 +920,7 @@ class UserCreate(BaseModel):
     password: str
 
 class UserLogin(BaseModel):
-    email: str
+    identifier: str  
     password: str
     
 class PortfolioCreate(BaseModel):
@@ -961,6 +962,9 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    existing_username = db.query(User).filter(User.username == user.username).first()
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
     hashed_password = pwd_context.hash(user.password)
     new_user = User(
         first_name=user.first_name, last_name=user.last_name,
@@ -973,9 +977,9 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login")
 def login_user(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(or_(User.email == user.identifier, User.username == user.identifier)).first()
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid identifier or password")
         
     access_token = create_access_token(data={"sub": db_user.email, "user_id": db_user.id})
     return {
