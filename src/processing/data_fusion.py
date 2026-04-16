@@ -41,6 +41,56 @@
 
 # if __name__ == "__main__":
 #     fuse_datasets("GTCO")
+# import pandas as pd
+# import os
+
+# def fuse_global_dataset():
+#     print("🔗 Fusing GLOBAL data (Multi-Stock Training Set)...")
+    
+#     # Use 5 diverse stocks to teach the AI different price scales
+#     training_tickers = ["GTCO", "ZENITH", "DANGCEM", "MTNN", "WAPCO"]
+#     all_fused_data = []
+    
+#     # The sentiment file is the same for all (it's market-wide sentiment for now)
+#     sent_path = "data/processed/sentiment_daily_scored.csv"
+#     if not os.path.exists(sent_path):
+#         print(f"❌ Error: {sent_path} not found. Run sentiment_scoring.py first.")
+#         return
+
+#     df_sent = pd.read_csv(sent_path)
+#     df_sent['date'] = pd.to_datetime(df_sent['date']).dt.date
+    
+#     for ticker in training_tickers:
+#         price_path = f"data/processed/{ticker}_clean.csv"
+        
+#         if not os.path.exists(price_path):
+#             print(f"⚠️ Warning: {price_path} not found. Skipping {ticker} for training.")
+#             continue
+            
+#         df_price = pd.read_csv(price_path)
+#         df_price['date'] = pd.to_datetime(df_price['date']).dt.date
+        
+#         # Merge Price and Sentiment
+#         fused_df = pd.merge(df_price, df_sent, on='date', how='left')
+#         fused_df['avg_sentiment'] = fused_df['avg_sentiment'].fillna(0.0)
+        
+#         all_fused_data.append(fused_df)
+#         print(f"   ✅ Added {ticker} to Global Training Set.")
+
+#     # Combine all 5 stocks into one massive dataset
+#     if all_fused_data:
+#         global_training_df = pd.concat(all_fused_data, ignore_index=True)
+        
+#         output_path = "data/processed/FINAL_TRAINING_DATA.csv"
+#         global_training_df.to_csv(output_path, index=False)
+        
+#         print(f"\n🎉 Success! Global training data saved to {output_path}")
+#         print(f"   - Total Training Rows: {len(global_training_df)}")
+#     else:
+#         print("❌ Failed to create global dataset.")
+
+# if __name__ == "__main__":
+#     fuse_global_dataset()
 import pandas as pd
 import os
 
@@ -51,10 +101,9 @@ def fuse_global_dataset():
     training_tickers = ["GTCO", "ZENITH", "DANGCEM", "MTNN", "WAPCO"]
     all_fused_data = []
     
-    # The sentiment file is the same for all (it's market-wide sentiment for now)
     sent_path = "data/processed/sentiment_daily_scored.csv"
     if not os.path.exists(sent_path):
-        print(f"❌ Error: {sent_path} not found. Run sentiment_scoring.py first.")
+        print(f"❌ Error: {sent_path} not found.")
         return
 
     df_sent = pd.read_csv(sent_path)
@@ -64,11 +113,14 @@ def fuse_global_dataset():
         price_path = f"data/processed/{ticker}_clean.csv"
         
         if not os.path.exists(price_path):
-            print(f"⚠️ Warning: {price_path} not found. Skipping {ticker} for training.")
+            print(f"⚠️ Warning: {price_path} not found. Skipping {ticker}.")
             continue
             
         df_price = pd.read_csv(price_path)
         df_price['date'] = pd.to_datetime(df_price['date']).dt.date
+        
+        # 🚨 THE FIX: Label every single row with its ticker name!
+        df_price['ticker'] = ticker 
         
         # Merge Price and Sentiment
         fused_df = pd.merge(df_price, df_sent, on='date', how='left')
@@ -77,15 +129,11 @@ def fuse_global_dataset():
         all_fused_data.append(fused_df)
         print(f"   ✅ Added {ticker} to Global Training Set.")
 
-    # Combine all 5 stocks into one massive dataset
     if all_fused_data:
         global_training_df = pd.concat(all_fused_data, ignore_index=True)
-        
         output_path = "data/processed/FINAL_TRAINING_DATA.csv"
         global_training_df.to_csv(output_path, index=False)
-        
-        print(f"\n🎉 Success! Global training data saved to {output_path}")
-        print(f"   - Total Training Rows: {len(global_training_df)}")
+        print(f"\n🎉 Success! Global data saved to {output_path}")
     else:
         print("❌ Failed to create global dataset.")
 
