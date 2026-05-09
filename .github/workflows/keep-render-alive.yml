@@ -1,0 +1,35 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    # Runs every 10 minutes (change to */5 for 5 minutes)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          echo "🏥 Running health check..."
+          
+          # Update this URL with your Render service URL
+          RENDER_URL="https://your-app.onrender.com"
+          
+          # Make GET request
+          RESPONSE=$(curl -s -w "\n%{http_code}" "$RENDER_URL/")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          echo "Status Code: $HTTP_CODE"
+          echo "Response: $BODY"
+          
+          # Check if successful
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Health check passed!"
+            exit 0
+          else
+            echo "⚠️  Unexpected status code: $HTTP_CODE"
+            exit 1
+          fi
