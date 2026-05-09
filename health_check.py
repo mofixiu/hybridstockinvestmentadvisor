@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 # Your Render service URL - update this with your actual Render URL
-RENDER_URL = os.getenv("RENDER_URL", "https://your-app.onrender.com")
+RENDER_URL = os.getenv("RENDER_URL", "https://hybstockadvisor-ap.onrender.com")
 HEALTH_ENDPOINT = f"{RENDER_URL}/"
 
 def health_check():

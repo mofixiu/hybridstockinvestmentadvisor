@@ -15,7 +15,7 @@ jobs:
           echo "🏥 Running health check..."
           
           # Update this URL with your Render service URL
-          RENDER_URL="https://your-app.onrender.com"
+          RENDER_URL="https://hybstockadvisor-ap.onrender.com"
           
           # Make GET request
           RESPONSE=$(curl -s -w "\n%{http_code}" "$RENDER_URL/")
