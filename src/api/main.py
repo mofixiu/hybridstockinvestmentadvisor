@@ -1302,6 +1302,7 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
     - Never invent fake prices or metrics. Rely solely on the context provided.
     - If the data says "BUY", explain it using the positive metrics provided.
     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
+    - Write short but detailed explanations. Use the data to back up every claim you make. Avoid generic statements.
     - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer. You can reference their exact profit/loss.
     """
     
