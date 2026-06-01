@@ -1314,12 +1314,17 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
             config=types.GenerateContentConfig(system_instruction=system_prompt)
         )
         return {"status": "success", "reply": response.text}
-        
+
     except Exception as e:
         error_msg = str(e)
+        print(f"🚨 GEMINI CRASH: {error_msg}") # Prints to your Render logs
+
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
             return {"status": "error", "reply": "I am receiving a lot of questions right now! Please wait about 60 seconds and ask me again."}
-        return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
+
+        # This will show you the REAL reason it's failing!
+        return {"status": "error", "reply": f"SYSTEM ERROR: {error_msg}"}
+
 # --- Password Reset Functions ---
 def send_otp_email(receiver_email: str, user_first_name: str, otp_code: str):
     SENDER_EMAIL = os.getenv("EMAIL_SENDER", "your_email@gmail.com")
