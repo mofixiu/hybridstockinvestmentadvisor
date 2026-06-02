@@ -1299,8 +1299,9 @@ def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User 
     4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
     
     GENERAL RULES:
+    - CATEGORY RECOGNITION: The system outputs "STRONG BUY", "BUY", "HOLD", "SELL", and "STRONG SELL". You MUST recognize and proudly use the "STRONG BUY" category if the data says so. Never claim your system only uses Buy/Hold/Sell.
+    - If the data says "STRONG BUY" or "BUY", explain the bullish momentum using the positive metrics provided.
     - Never invent fake prices or metrics. Rely solely on the context provided.
-    - If the data says "BUY", explain it using the positive metrics provided.
     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
     - Write short but detailed explanations. Use the data to back up every claim you make. Avoid generic statements.
     - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer. You can reference their exact profit/loss.
