@@ -1,113 +1,90 @@
-# import pandas as pd
-# import pandas_ta as ta
-# import os
+"""Leakage-aware OHLCV features and 5/10/20-session forward targets."""
 
-# def add_technical_indicators(ticker="GTCO"):
-#     print(f"🛠️ Engineering Features for {ticker}...")
-    
-#     # 1. Load the Fused Data
-#     input_path = "data/processed/FINAL_TRAINING_DATA.csv"
-#     output_path = "data/processed/FINAL_TRAINING_DATA_WITH_FEATURES.csv"
-    
-#     if not os.path.exists(input_path):
-#         print(f"❌ Error: {input_path} not found. Run src/data_fusion.py first.")
-#         return
+from __future__ import annotations
 
-#     df = pd.read_csv(input_path)
-#     df['date'] = pd.to_datetime(df['date'])
-#     df.set_index('date', inplace=True) # Index by date for calculations
-    
-#     # 2. Calculate Indicators (The Magic)
-    
-#     # RSI (Relative Strength Index) - Momentum
-#     # Signal: >70 is Overbought (Sell), <30 is Oversold (Buy)
-#     df['RSI'] = df.ta.rsi(length=14)
-    
-#     # EMA (Exponential Moving Average) - Trend
-#     # EMA 50 is the "Medium Term" trend
-#     df['EMA_50'] = df.ta.ema(length=50)
-#     # EMA 200 is the "Long Term" trend (Golden Cross/Death Cross)
-#     df['EMA_200'] = df.ta.ema(length=200)
-    
-#     # MACD (Moving Average Convergence Divergence) - Trend Reversal
-#     macd = df.ta.macd(fast=12, slow=26, signal=9)
-#     # pandas_ta returns 3 columns, we join them back
-#     df = df.join(macd)
-    
-#     # Bollinger Bands - Volatility
-#     bbands = df.ta.bbands(length=20, std=2)
-#     df = df.join(bbands)
-    
-#     # 3. Clean NaN Values
-#     # The first 200 days will have NaN because EMA_200 needs 200 days of history.
-#     # We must drop them, or the AI will crash.
-#     print(f"   - Original Row Count: {len(df)}")
-#     df.dropna(inplace=True)
-#     print(f"   - New Row Count (after dropping warm-up days): {len(df)}")
-    
-#     # 4. Target Creation (What are we predicting?)
-#     # Let's define: 1 (Buy) if price goes UP tomorrow, 0 (Sell/Hold) if price goes DOWN
-#     # We shift the 'close' price backwards by 1 day to compare
-#     df['Target'] = (df['close'].shift(-1) > df['close']).astype(int)
-    
-#     # 5. Save
-#     df.reset_index(inplace=True)
-#     df.to_csv(output_path, index=False)
-    
-#     print(f"✅ Success! Features added. Saved to {output_path}")
-#     print(df[['date', 'close', 'RSI', 'EMA_50', 'Target']].tail())
-
-# if __name__ == "__main__":
-#     add_technical_indicators("GTCO")
-import pandas as pd
-import pandas_ta as ta
 import os
 
-def add_technical_indicators():
-    print("🛠️ Engineering Features for GLOBAL Dataset (Preventing Data Bleed)...")
-    
-    input_path = "data/processed/FINAL_TRAINING_DATA.csv"
-    output_path = "data/processed/FINAL_TRAINING_DATA_WITH_FEATURES.csv"
-    
-    if not os.path.exists(input_path):
-        print(f"❌ Error: {input_path} not found. Run src/processing/data_fusion.py first.")
-        return
+import numpy as np
+import pandas as pd
 
-    df = pd.read_csv(input_path)
-    df['date'] = pd.to_datetime(df['date'])
-    df.set_index('date', inplace=True)
-    
-    safe_dfs = []
-    
-    # 🚨 THE FIX: Group by ticker and do the math in absolute isolation
-    for ticker, group_df in df.groupby('ticker'):
-        print(f"   - Crunching technicals for {ticker}...")
-        group_df = group_df.sort_index() # Ensure dates are strictly oldest to newest
-        
-        # Calculate Indicators safely
-        group_df['RSI'] = group_df.ta.rsi(length=14)
-        group_df['EMA_50'] = group_df.ta.ema(length=50)
-        group_df['EMA_200'] = group_df.ta.ema(length=200)
-        
-        macd = group_df.ta.macd(fast=12, slow=26, signal=9)
-        group_df = group_df.join(macd)
-        
-        bbands = group_df.ta.bbands(length=20, std=2)
-        group_df = group_df.join(bbands)
-        
-        # Safely create Target: Did THIS specific stock go up tomorrow?
-        group_df['Target'] = (group_df['close'].shift(-1) > group_df['close']).astype(int)
-        
-        # Drop the NaN warm-up days for this specific stock
-        group_df.dropna(inplace=True)
-        safe_dfs.append(group_df)
-        
-    # Stitch the safe datasets back together into one master CSV
-    final_df = pd.concat(safe_dfs)
-    final_df.reset_index(inplace=True)
-    
-    final_df.to_csv(output_path, index=False)
-    print(f"\n✅ Success! Multi-Stock Features added safely. Saved to {output_path}")
+INPUT_PATH = "data/processed/NGX_daily_bars.csv"
+OUTPUT_PATH = "data/processed/FINAL_TRAINING_DATA_WITH_FEATURES.csv"
+TARGET_HORIZONS = (5, 10, 20)
+
+
+def add_swing_features(group: pd.DataFrame) -> pd.DataFrame:
+    """Add price-only technical indicators and forward targets to one symbol."""
+    frame = group.copy().sort_values("date").reset_index(drop=True)
+    close = pd.to_numeric(frame["close"], errors="coerce")
+    frame["close"] = close
+
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14, min_periods=14).mean()
+    loss = -delta.clip(upper=0).rolling(14, min_periods=14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    frame["RSI"] = 100 - (100 / (1 + rs))
+    frame.loc[(gain == 0) & (loss == 0), "RSI"] = 50
+    frame.loc[(loss == 0) & (gain > 0), "RSI"] = 100
+    frame.loc[(gain == 0) & (loss > 0), "RSI"] = 0
+
+    frame["EMA_50"] = close.ewm(span=50, adjust=False, min_periods=50).mean()
+    frame["EMA_200"] = close.ewm(span=200, adjust=False, min_periods=200).mean()
+    ema_12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
+    ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
+    frame["MACD"] = ema_12 - ema_26
+    frame["MACD_SIGNAL"] = frame["MACD"].ewm(span=9, adjust=False, min_periods=9).mean()
+    frame["MACD_HIST"] = frame["MACD"] - frame["MACD_SIGNAL"]
+
+    middle = close.rolling(20, min_periods=20).mean()
+    deviation = close.rolling(20, min_periods=20).std()
+    frame["BB_MID"] = middle
+    frame["BB_UPPER"] = middle + 2 * deviation
+    frame["BB_LOWER"] = middle - 2 * deviation
+    frame["BB_WIDTH_PCT"] = ((frame["BB_UPPER"] - frame["BB_LOWER"]) / middle) * 100
+
+    if "volume" in frame.columns:
+        frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce")
+        frame["VOLUME_MA_20"] = frame["volume"].rolling(20, min_periods=20).mean()
+    else:
+        frame["volume"] = np.nan
+
+    for horizon in TARGET_HORIZONS:
+        future_close = close.shift(-horizon)
+        frame[f"OutcomeDate_{horizon}"] = pd.to_datetime(frame["date"]).shift(-horizon)
+        forward_return = (future_close / close - 1) * 100
+        frame[f"ForwardReturnPct_{horizon}"] = forward_return
+        target = (future_close > close).astype("Int64")
+        frame[f"Target_{horizon}"] = target.where(future_close.notna())
+
+    # Compatibility for existing exploratory scripts: Target now means the
+    # 10-session direction, not next-day movement.
+    frame["Target"] = frame["Target_10"]
+    return frame
+
+
+def add_technical_indicators() -> pd.DataFrame:
+    if not os.path.exists(INPUT_PATH):
+        raise FileNotFoundError(
+            f"{INPUT_PATH} not found. Run scripts/export_market_history.py after authorized ingestion."
+        )
+    data = pd.read_csv(INPUT_PATH)
+    required = {"date", "ticker", "close"}
+    missing = required.difference(data.columns)
+    if missing:
+        raise ValueError(f"Market history is missing required columns: {', '.join(sorted(missing))}")
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    data = data.dropna(subset=["date", "ticker", "close"])
+    features = pd.concat(
+        [add_swing_features(group) for _, group in data.groupby("ticker", sort=True)],
+        ignore_index=True,
+    )
+    # Keep every feature-ready row, including the latest 20 sessions. Their
+    # forward targets remain null until the required future closes exist.
+    features = features.dropna(subset=["RSI", "EMA_50", "EMA_200"])
+    features.to_csv(OUTPUT_PATH, index=False)
+    return features
+
 
 if __name__ == "__main__":
-    add_technical_indicators()
+    result = add_technical_indicators()
+    print(f"Wrote {len(result)} swing-training rows to {OUTPUT_PATH}")

@@ -9,3 +9,6 @@ passlib[bcrypt]
 bcrypt==3.2.2
 python-dotenv
 google-genai
+email-validator
+scikit-learn
+joblib

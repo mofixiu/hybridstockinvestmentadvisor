@@ -1,1364 +1,742 @@
-# from fastapi import FastAPI
-# import pandas as pd
-# import numpy as np
-# import os
-# from fastapi import Depends, HTTPException, status
-# from sqlalchemy.orm import Session
-# from passlib.context import CryptContext
-# from pydantic import BaseModel
-# import random
-# import uuid
-# import smtplib
-# from google import genai
-# from google.genai import types
-# import glob
-# from typing import Optional
-# from datetime import datetime, timedelta
-# from email.mime.text import MIMEText
-# from email.mime.multipart import MIMEMultipart
-# # Initialize the API
-# app = FastAPI(
-#     title="HybStockAdvisor API",
-#     description="Backend API serving ML predictions for the Nigerian Stock Market",
-#     version="1.0.0"
-# )
+"""HybStockAdvisor API: authenticated accounts and verified market research."""
 
-# @app.get("/")
-# def read_root():
-#     return {"status": "Online", "message": "Welcome to the HybStockAdvisor Engine"}
+from __future__ import annotations
 
-# # @app.get("/api/forecast/{ticker}")
-# # def get_forecast(ticker: str):
-# #     print(f"📡 API Request received for: {ticker.upper()}")
-    
-# #     # Locate the Safety Index file generated in Week 9
-# #     file_path = f"data/processed/{ticker.upper()}_SAFETY_INDEX.csv"
-    
-# #     if not os.path.exists(file_path):
-# #         return {"error": "Data not found. Please run the AI pipeline for this ticker first."}
-    
-# #     # Read the data and get the latest 5 days
-# #     df = pd.read_csv(file_path)
-# #     latest_data = df.tail(5).to_dict(orient="records")
-    
-# #     # Return the data as a JSON object (which your app will easily read)
-# #     return {
-# #         "ticker": ticker.upper(),
-# #         "status": "success",
-# #         "data": latest_data
-# #     }
-# # Import the database logic we just created
-# from src.api.database import PasswordReset, get_db, User
-
-# # Password Hashing Setup
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# # --- Pydantic Models (To validate the incoming JSON from Flutter) ---
-# class UserCreate(BaseModel):
-#     first_name: str
-#     last_name: str
-#     username: str
-#     email: str
-#     password: str
-
-# class UserLogin(BaseModel):
-#     email: str
-#     password: str
-    
-# class PortfolioCreate(BaseModel):
-#     user_id: int
-#     ticker: str
-#     quantity: float
-#     average_buy_price: float
-
-# class WatchlistCreate(BaseModel):
-#     user_id: int
-#     ticker: str
-# class ForgotPasswordRequest(BaseModel):
-#     email: str
-
-# class VerifyOtpRequest(BaseModel):
-#     email: str
-#     otp: str
-
-# class ResetPasswordRequest(BaseModel):
-#     reset_token: str
-#     new_password: str
-# class ChatMessage(BaseModel):
-#     text: str
-#     current_ticker: Optional[str] = None  # 🚨 Added this so Flutter can pass the screen context
-# class RemoveItemRequest(BaseModel):
-#     user_id: int
-#     ticker: str
-# # --- AUTHENTICATION ENDPOINTS ---
-
-# @app.post("/api/auth/register")
-# def register_user(user: UserCreate, db: Session = Depends(get_db)):
-#     """Creates a new user in the MySQL database."""
-#     # 1. Check if email already exists
-#     existing_user = db.query(User).filter(User.email == user.email).first()
-#     if existing_user:
-#         raise HTTPException(status_code=400, detail="Email already registered")
-        
-#     # 2. Hash the password for security
-#     hashed_password = pwd_context.hash(user.password)
-    
-#     # 3. Save to database
-#     new_user = User(
-#         first_name=user.first_name,
-#         last_name=user.last_name,
-#         username=user.username,
-#         email=user.email,
-#         password_hash=hashed_password
-#     )
-    
-#     db.add(new_user)
-#     db.commit()
-#     db.refresh(new_user)
-    
-#     return {
-#         "status": "success", 
-#         "message": "Account created successfully",
-#         "data": {"user_id": new_user.id, "username": new_user.username}
-#     }
-
-# @app.post("/api/auth/login")
-# def login_user(user: UserLogin, db: Session = Depends(get_db)):
-#     """Verifies credentials and issues a simple token."""
-#     # 1. Find user by email
-#     db_user = db.query(User).filter(User.email == user.email).first()
-    
-#     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
-#         raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-#     # 2. Generate a simple token (For enterprise, use JWT. This is perfect for FYP).
-#     # We combine user_id and email so Flutter knows who is logged in.
-#     fake_token = f"auth_token_{db_user.id}_{db_user.username}"
-    
-#     return {
-#         "status": "success",
-#         "message": "Login successful",
-#         "token": fake_token,
-#         "user_data": {
-#             "id": db_user.id,
-#             "first_name": db_user.first_name,
-#             "last_name": db_user.last_name,  
-#             "username": db_user.username,
-#             "email": db_user.email
-#         }
-#     }
-# from src.api.database import get_db, User, Portfolio, Watchlist
-# @app.get("/api/insights/{ticker}")
-# def get_insights(ticker: str):
-#     """Generates a text-based AI explanation from the technical data."""
-#     file_path = f"data/processed/{ticker}_SAFETY_INDEX.csv"
-#     if not os.path.exists(file_path):
-#         return {"status": "error", "error": "Data not found"}
-    
-#     df = pd.read_csv(file_path)
-#     # Replace any NaNs to prevent JSON crashes
-#     latest = df.iloc[-1].replace([np.inf, -np.inf], np.nan).fillna(0)
-    
-#     rec = latest['Recommendation']
-#     rsi = float(latest['RSI'])
-#     ema50 = float(latest['EMA_50'])
-#     close = float(latest['close'])
-    
-#     # --- The Auto-Generated AI Text ---
-#     explanation = f"Our LightGBM model has analyzed {ticker}. "
-#     if close > ema50:
-#         explanation += f"The asset is currently trading at ₦{close:.2f}, which is above its 50-day moving average (₦{ema50:.2f}), indicating underlying bullish momentum. "
-#     else:
-#         explanation += f"The asset is trading at ₦{close:.2f}, below its 50-day moving average (₦{ema50:.2f}), showing bearish pressure. "
-        
-#     if rsi > 70:
-#         explanation += f"However, with an RSI of {rsi:.1f}, the stock is technically overbought and may face an imminent price correction."
-#     elif rsi < 30:
-#         explanation += f"With an RSI of {rsi:.1f}, the stock is currently oversold, presenting a potential discounted entry opportunity."
-#     else:
-#         explanation += f"The RSI sits in neutral territory at {rsi:.1f}, suggesting stable price consolidation."
-
-#     # --- UI Impact Calculations (-1.0 to 1.0) ---
-#     # Convert RSI to an impact score. 50 is neutral (0). 30 is good (+0.4). 70 is bad (-0.4).
-#     rsi_impact = (50 - rsi) / 50 
-    
-#     # Convert EMA to an impact score
-#     ema_pct_diff = (close - ema50) / ema50
-#     ema_impact = max(-1.0, min(1.0, ema_pct_diff * 10)) # Cap at -1 and 1
-    
-#     return {
-#         "status": "success",
-#         "data": {
-#             "ticker": ticker,
-#             "recommendation": rec,
-#             "explanation": explanation,
-#             "ai_confidence": float(latest['AI_Score']),
-#             "market_stability": float(latest['Stability_Score']),
-#             "public_sentiment": float(latest['Sentiment_Rescaled']),
-#             "safety_index": float(latest['Safety_Index']),
-#             "rsi_impact": float(rsi_impact),
-#             "ema_impact": float(ema_impact)
-#         }
-#     }
-# @app.get("/api/forecast/{ticker}")
-# def get_forecast(ticker: str):
-#     file_path = f"data/processed/{ticker}_SAFETY_INDEX.csv"
-    
-#     if not os.path.exists(file_path):
-#         return {"status": "error", "error": "Data not found. Please run the AI pipeline first."}
-        
-#     try:
-#         df = pd.read_csv(file_path)
-        
-#         # --- THE FIX: Replace NaN and Infinity with None so JSON doesn't crash ---
-#         df = df.replace([np.inf, -np.inf], np.nan)
-#         df = df.where(pd.notnull(df), None)
-#         # -------------------------------------------------------------------------
-        
-#         # Get the last 5 days
-#         recent_data = df.tail(5).to_dict(orient="records")
-        
-#         return {
-#             "status": "success",
-#             "data": recent_data
-#         }
-#     except Exception as e:
-#         # This will print the exact error in your terminal if it fails again
-#         print(f"API CRASH ERROR: {e}") 
-#         return {"status": "error", "error": str(e)}
-
-# # @app.get("/api/summary")
-# # def get_market_summary():
-# #     """Returns the latest price and 24h change for all analyzed stocks in one call."""
-# #     processed_dir = "data/processed"
-# #     summary = []
-    
-# #     if not os.path.exists(processed_dir):
-# #         return {"status": "error", "message": "No processed data found"}
-        
-# #     for file in os.listdir(processed_dir):
-# #         if file.endswith("_SAFETY_INDEX.csv"):
-# #             ticker = file.replace("_SAFETY_INDEX.csv", "")
-# #             try:
-# #                 df = pd.read_csv(os.path.join(processed_dir, file))
-# #                 if not df.empty:
-# #                     latest = df.iloc[-1]
-# #                     # Get yesterday to calculate the percentage change
-# #                     prev = df.iloc[-2] if len(df) > 1 else latest
-# #                     price = float(latest['close'])
-# #                     prev_price = float(prev['close'])
-                    
-# #                     change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
-                    
-# #                     summary.append({
-# #                         "symbol": ticker,
-# #                         "price": price,
-# #                         "change_pct": change_pct
-# #                     })
-# #             except Exception as e:
-# #                 continue
-                
-# #     return {"status": "success", "data": summary}
-# @app.get("/api/summary")
-# def get_market_summary():
-#     """Returns the latest price, 24h change, Name, and Market Cap for all analyzed stocks."""
-#     processed_dir = "data/processed"
-#     summary = []
-    
-#     # A tiny fallback dictionary just in case your CSVs don't have the 'Name' column yet
-#     fallback_names = {
-#         "GTCO": "Guaranty Trust Holding",
-#         "ZENITHBANK": "Zenith Bank Plc",
-#         "UBA": "United Bank for Africa",
-#         "DANGCEM": "Dangote Cement",
-#         "MTNN": "MTN Nigeria",
-#         "WEMABANK": "Wema Bank Plc"
-#     }
-    
-#     if not os.path.exists(processed_dir):
-#         return {"status": "error", "message": "No processed data found"}
-        
-#     for file in os.listdir(processed_dir):
-#         if file.endswith("_SAFETY_INDEX.csv"):
-#             ticker = file.replace("_SAFETY_INDEX.csv", "")
-#             try:
-#                 df = pd.read_csv(os.path.join(processed_dir, file))
-#                 if not df.empty:
-#                     latest = df.iloc[-1]
-#                     prev = df.iloc[-2] if len(df) > 1 else latest
-#                     price = float(latest['close'])
-#                     prev_price = float(prev['close'])
-                    
-#                     change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
-                    
-#                     # # Safely grab Name and Market Cap (Defaults to N/A if you haven't scraped it yet)
-#                     # latest_dict = latest.to_dict()
-#                     # company_name = latest_dict.get('Name', fallback_names.get(ticker, f"{ticker} Plc"))
-#                     # market_cap = latest_dict.get('Market_Cap', "N/A")
-#                     latest_dict = latest.to_dict()
-#                     company_name = latest_dict.get('Name', f"{ticker} Plc")
-#                     market_cap = latest_dict.get('Market_Cap', "--")
-#                     summary.append({
-#                         "symbol": ticker,
-#                         "name": str(company_name),
-#                         "market_cap": str(market_cap),
-#                         "price": price,
-#                         "change_pct": change_pct
-#                     })
-#             except Exception as e:
-#                 continue
-                
-#     return {"status": "success", "data": summary}
-
-# @app.post("/api/portfolio/add")
-# def add_to_portfolio(item: PortfolioCreate, db: Session = Depends(get_db)):
-#     new_entry = Portfolio(
-#         user_id=item.user_id,
-#         ticker=item.ticker,
-#         quantity=item.quantity,
-#         average_buy_price=item.average_buy_price
-#     )
-#     db.add(new_entry)
-#     db.commit()
-#     return {"status": "success"}
-# # ── Email Sending Utility & Template ─────────────────────────────
-# def send_otp_email(receiver_email: str, user_first_name: str, otp_code: str):
-#     """Sends a premium HTML email with the OTP."""
-    
-#     # ⚠️ NOTE FOR DEFENSE: To actually send emails, replace these with a real Gmail address
-#     # and an "App Password" generated from your Google Account settings.
-#     # For testing right now, this function will just print the OTP to your terminal!
-#     SENDER_EMAIL = "your_email@gmail.com" 
-#     SENDER_PASSWORD = "your_app_password" 
-    
-#     html_template = f"""
-#     <!DOCTYPE html>
-#     <html>
-#     <body style="font-family: Arial, sans-serif; background-color: #F2F4F7; padding: 20px;">
-#         <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
-#             <h2 style="color: #0A3D62; text-align: center; margin-bottom: 10px;">HybStockAdvisor</h2>
-#             <p style="color: #555; font-size: 16px;">Hello {user_first_name},</p>
-#             <p style="color: #555; font-size: 16px;">We received a request to reset the password for your account. Your password reset code is:</p>
-            
-#             <div style="text-align: center; margin: 30px 0;">
-#                 <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #0A3D62; background-color: rgba(10, 61, 98, 0.1); padding: 15px 30px; border-radius: 8px;">
-#                     {otp_code}
-#                 </span>
-#             </div>
-            
-#             <p style="color: #555; font-size: 14px;">This code will expire in <strong>15 minutes</strong>. If you did not request this, please ignore this email.</p>
-#             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-#             <p style="color: #999; font-size: 12px; text-align: center;">Secure your investments with AI.<br>The HybStockAdvisor Team</p>
-#         </div>
-#     </body>
-#     </html>
-#     """
-    
-#     print(f"\n{'='*50}\n📧 MOCK EMAIL SENT TO: {receiver_email}\nOTP CODE: {otp_code}\n{'='*50}\n")
-    
-#     # Uncomment the code below when you are ready to send real emails
-    
-#     try:
-#         msg = MIMEMultipart()
-#         msg['From'] = SENDER_EMAIL
-#         msg['To'] = receiver_email
-#         msg['Subject'] = "Your Password Reset Code - HybStockAdvisor"
-#         msg.attach(MIMEText(html_template, 'html'))
-        
-#         server = smtplib.SMTP('smtp.gmail.com', 587)
-#         server.starttls()
-#         server.login(SENDER_EMAIL, SENDER_PASSWORD)
-#         server.send_message(msg)
-#         server.quit()
-#     except Exception as e:
-#         print(f"Failed to send email: {e}")
-   
-
-# # ── Password Reset Endpoints ─────────────────────────────────────
-
-# @app.post("/api/auth/forgot-password")
-# def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-#     user = db.query(User).filter(User.email == req.email).first()
-#     if not user:
-#         raise HTTPException(status_code=404, detail="Account not found")
-        
-#     # Generate 6-digit OTP
-#     otp = str(random.randint(100000, 999999))
-#     expiry = datetime.now() + timedelta(minutes=15)
-    
-#     # Check if they already have an active reset request
-#     existing_reset = db.query(PasswordReset).filter(PasswordReset.email == req.email).first()
-#     if existing_reset:
-#         existing_reset.otp = otp
-#         existing_reset.expires_at = expiry
-#         existing_reset.reset_token = None # Clear any old tokens
-#     else:
-#         new_reset = PasswordReset(email=req.email, otp=otp, expires_at=expiry)
-#         db.add(new_reset)
-        
-#     db.commit()
-    
-#     # Send the email
-#     send_otp_email(user.email, user.first_name, otp)
-    
-#     return {"status": "success", "message": "OTP sent to email"}
-
-# @app.post("/api/auth/verify-reset-otp")
-# def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
-#     reset_record = db.query(PasswordReset).filter(PasswordReset.email == req.email).first()
-    
-#     if not reset_record:
-#         raise HTTPException(status_code=400, detail="No reset request found")
-        
-#     if reset_record.otp != req.otp:
-#         raise HTTPException(status_code=400, detail="Invalid OTP code")
-        
-#     if datetime.now() > reset_record.expires_at:
-#         raise HTTPException(status_code=400, detail="OTP has expired")
-        
-#     # Success! Generate a secure token so they can change their password
-#     secure_token = str(uuid.uuid4())
-#     reset_record.reset_token = secure_token
-#     db.commit()
-    
-#     return {"status": "success", "reset_token": secure_token}
-
-# @app.post("/api/auth/reset-password")
-# def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
-#     reset_record = db.query(PasswordReset).filter(PasswordReset.reset_token == req.reset_token).first()
-    
-#     if not reset_record:
-#         raise HTTPException(status_code=400, detail="Invalid or expired reset session")
-        
-#     # Find the user and update password
-#     user = db.query(User).filter(User.email == reset_record.email).first()
-#     if not user:
-#         raise HTTPException(status_code=404, detail="User not found")
-        
-#     user.password_hash = pwd_context.hash(req.new_password)
-    
-#     # Delete the reset record so it can't be used again
-#     db.delete(reset_record)
-#     db.commit()
-    
-#     return {"status": "success", "message": "Password has been reset successfully"}
-# @app.post("/api/watchlist/add")
-# def add_to_watchlist(item: WatchlistCreate, db: Session = Depends(get_db)):
-#     # Check if already exists
-#     existing = db.query(Watchlist).filter_by(user_id=item.user_id, ticker=item.ticker).first()
-#     if existing:
-#         return {"status": "error", "detail": "Already in watchlist"}
-        
-#     new_entry = Watchlist(user_id=item.user_id, ticker=item.ticker)
-#     db.add(new_entry)
-#     db.commit()
-#     return {"status": "success"}
-
-# # --- AI CHATBOT ENDPOINT ---
-
-# # Configure Gemini with your API Key
-
-# # @app.post("/api/chat")
-# # def ai_chat(req: ChatMessage):
-# #     user_message = req.text.upper()
-# #     context_data = ""
-    
-# #     # 1. Context Injection: Check if they mentioned any stock we track
-# #     processed_dir = "data/processed"
-# #     if os.path.exists(processed_dir):
-# #         for file in os.listdir(processed_dir):
-# #             if file.endswith("_SAFETY_INDEX.csv"):
-# #                 ticker = file.replace("_SAFETY_INDEX.csv", "")
-                
-# #                 # If the user's message contains the stock ticker (e.g., "GTCO")
-# #                 if ticker in user_message:
-# #                     try:
-# #                         df = pd.read_csv(os.path.join(processed_dir, file))
-# #                         latest = df.iloc[-1]
-                        
-# #                         # Build a secret summary of the math for Gemini
-# #                         context_data += f"\nData for {ticker}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-# #                         context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-# #                         context_data += f"Final Recommendation={latest['Recommendation']}, AI Confidence={latest['AI_Score']:.1f}%.\n"
-# #                     except Exception:
-# #                         pass
-    
-# #     # 2. Build the System Prompt (The Chatbot's Personality)
-# #     system_prompt = f"""
-# #     You are Lexi, a professional, smart, and friendly AI financial assistant for the Nigerian Stock Exchange (NGX).
-# #     Keep your answers concise, conversational, and easy to understand for a beginner investor.
-# #     Format your text nicely. Do not use more than 4 sentences unless asked for detail.
-    
-# #     Here is the live mathematical data for the stocks the user is asking about (if any):
-# #     {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-# #     RULES:
-# #     - If the data shows a BUY, explain that it's because of strong technicals.
-# #     - If it shows a SELL, warn them about Overbought conditions (RSI > 70) or a Death Cross.
-# #     - Never invent fake prices. ONLY use the prices provided in the data above.
-# #     """
-    
-# #     # 3. Call Gemini
-# #     try:
-# #         model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_prompt)
-# #         response = model.generate_content(req.text)
-# #         return {"status": "success", "reply": response.text}
-# #     except Exception as e:
-# #         print(f"Gemini Error: {e}")
-# #         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
-# @app.post("/api/chat")
-# def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-#     user_message = req.text.upper()
-#     context_data = ""
-#     processed_dir = "data/processed"
-    
-#     # 1. Fetch the User's Database Records using the JWT ID!
-#     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
-#     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
-    
-#     portfolio_tickers = [p.ticker for p in portfolio_db]
-#     watchlist_tickers = [w.ticker for w in watchlist_db]
-    
-#     # We use a 'set' so we don't accidentally load the same stock twice
-#     target_tickers = set()
-    
-#     # A. Add the stock on the screen
-#     if req.current_ticker:
-#         target_tickers.add(req.current_ticker.upper())
-        
-#     # B. Add the user's Portfolio & Watchlist
-#     for t in portfolio_tickers: target_tickers.add(t)
-#     for t in watchlist_tickers: target_tickers.add(t)
-        
-#     # C. Add any stock explicitly mentioned in the text message
-#     if os.path.exists(processed_dir):
-#         for file in os.listdir(processed_dir):
-#             if file.endswith("_SAFETY_INDEX.csv"):
-#                 ticker = file.replace("_SAFETY_INDEX.csv", "")
-#                 if ticker in user_message:
-#                     target_tickers.add(ticker)
-
-#     # 2. Build the Data Context for Gemini
-#     for ticker in target_tickers:
-#         file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-#         if os.path.exists(file_path):
-#             try:
-#                 df = pd.read_csv(file_path)
-#                 latest = df.iloc[-1]
-                
-#                 # 🚨 NEW: Tag the data so Lexi knows WHY she is looking at it
-#                 status_tags = []
-#                 if ticker == req.current_ticker: status_tags.append("Currently on screen")
-#                 if ticker in portfolio_tickers: status_tags.append("In User's Portfolio")
-#                 if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
-                
-#                 tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
-                
-#                 context_data += f"\nData for {ticker}{tag_str}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-#                 context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-#                 context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
-#                 context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
-#             except Exception:
-#                 pass
-    
-#     # 3. Build the System Prompt (Now Personalized!)
-#     system_prompt = f"""
-#     You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
-#     You are talking to {current_user.first_name}. Address them by name naturally.
-    
-#     Here is the live mathematical data for the stocks the user owns, watches, or is currently asking about:
-#     {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-#     CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
-#     If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
-#     1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
-#     2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
-#     3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
-#     4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
-    
-#     GENERAL RULES:
-#     - Never invent fake prices or metrics. Rely solely on the context provided.
-#     - If the data says "BUY", explain it using the positive metrics provided.
-#     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
-#     - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer.
-#     """
-    
-#     # 4. Call Gemini
-#     try:
-#         response = client.models.generate_content(
-#             model='gemini-2.5-flash',
-#             contents=req.text,
-#             config=types.GenerateContentConfig(
-#                 system_instruction=system_prompt,
-#             )
-#         )
-#         return {"status": "success", "reply": response.text}
-        
-#     except Exception as e:
-#         error_msg = str(e)
-#         print(f"Gemini Error: {error_msg}")
-#         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-#             return {
-#                 "status": "error", 
-#                 "reply": "I am receiving a lot of questions right now! Please wait about 60 seconds and ask me again."
-#             }
-#         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
-# # @app.post("/api/chat")
-# # def ai_chat(req: ChatMessage):
-# #     user_message = req.text.upper()
-# #     context_data = ""
-# #     processed_dir = "data/processed"
-    
-# #    # 1. Fetch the User's Database Records
-# #     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
-# #     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
-    
-# #     portfolio_tickers = [p.ticker for p in portfolio_db]
-# #     watchlist_tickers = [w.ticker for w in watchlist_db]
-    
-# #     # We use a 'set' so we don't accidentally load the same stock twice
-# #     target_tickers = set()
-    
-# #     # A. Add the stock on the screen
-# #     if req.current_ticker:
-# #         target_tickers.add(req.current_ticker.upper())
-        
-# #     # B. Add the user's Portfolio & Watchlist
-# #     for t in portfolio_tickers: target_tickers.add(t)
-# #     for t in watchlist_tickers: target_tickers.add(t)
- 
-# #     # 2. Did they explicitly mention any other stocks in their text?
-# #     if os.path.exists(processed_dir):
-# #         for file in os.listdir(processed_dir):
-# #             if file.endswith("_SAFETY_INDEX.csv"):
-# #                 ticker = file.replace("_SAFETY_INDEX.csv", "")
-# #                 if ticker in user_message:
-# #                     target_tickers.append(ticker)
-
-#     # # 3. Build the Data Context for Gemini (NOW INCLUDES SAFETY INDEX!)
-#     # for ticker in target_tickers:
-#     #     file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-#     #     if os.path.exists(file_path):
-#     #         try:
-#     #             df = pd.read_csv(file_path)
-#     #             latest = df.iloc[-1]
-                
-#     #             context_data += f"\nData for {ticker} (Currently on screen): Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-#     #             context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-#     #             context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
-#     #             context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
-#     #         except Exception:
-#     #             pass
-    
-#     # # 4. Build the System Prompt (TEACHING IT YOUR CUSTOM MATH)
-#     # system_prompt = f"""
-#     # You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
-#     # Keep your answers concise, conversational, and easy to understand.
-    
-#     # Here is the live mathematical data for the stocks the user is asking about or looking at:
-#     # {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-#     # CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
-#     # If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
-#     # 1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
-#     # 2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
-#     # 3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
-#     # 4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
-    
-#     # GENERAL RULES:
-#     # - Never invent fake prices or metrics. Rely solely on the context provided.
-#     # - If the data says "BUY", explain it using the positive metrics provided.
-#     # """
-#     # 2. Build the Data Context for Gemini
-#     # for ticker in target_tickers:
-#     #     file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-#     #     if os.path.exists(file_path):
-#     #         try:
-#     #             df = pd.read_csv(file_path)
-#     #             latest = df.iloc[-1]
-                
-#     #             # 🚨 NEW: Tag the data so Lexi knows WHY she is looking at it
-#     #             status_tags = []
-#     #             if ticker == req.current_ticker: status_tags.append("Currently on screen")
-#     #             if ticker in portfolio_tickers: status_tags.append("In User's Portfolio")
-#     #             if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
-                
-#     #             tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
-                
-#     #             context_data += f"\nData for {ticker}{tag_str}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-#     #             context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-#     #             context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
-#     #             context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
-#     #         except Exception:
-#     #             pass
-    
-#     # # 3. Build the System Prompt (Now Personalized!)
-#     # system_prompt = f"""
-#     # You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
-#     # You are talking to {current_user.first_name}. Address them by name if it fits the conversation naturally.
-    
-#     # Here is the live mathematical data for the stocks the user owns, watches, or is currently asking about:
-#     # {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-#     # CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
-#     # If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
-#     # 1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
-#     # 2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
-#     # 3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
-#     # 4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
-    
-#     # GENERAL RULES:
-#     # - Never invent fake prices or metrics. Rely solely on the context provided.
-#     # - If the data says "BUY", explain it using the positive metrics provided.
-#     # - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
-#     # - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer.
-#     # """
-#     # # 5. Call Gemini using the NEW SDK
-#     # try:
-#     #     # Initialize the new client with your API key
-        
-#     #     # Send the request using the new configuration format
-#     #     response = client.models.generate_content(
-#     #         model='gemini-2.5-flash',
-#     #         contents=req.text,
-#     #         config=types.GenerateContentConfig(
-#     #             system_instruction=system_prompt,
-#     #         )
-#     #     )
-#     #     return {"status": "success", "reply": response.text}
-        
-#     # except Exception as e:
-#     #     error_msg = str(e)
-#     #     print(f"Gemini Error: {error_msg}")
-        
-#     #     # If we hit the Google speed limit, tell the user gracefully
-#     #     if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-#     #         return {
-#     #             "status": "error", 
-#     #             "reply": "I am receiving a lot of questions right now! 😅 Please wait about 60 seconds and ask me again."
-#     #         }
-            
-#     #     return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
-    
-# @app.delete("/api/portfolio/remove")
-# def remove_from_portfolio(item: RemoveItemRequest, db: Session = Depends(get_db)):
-#     # 1. Look for the exact stock owned by this specific user
-#     db_item = db.query(Portfolio).filter(
-#         Portfolio.user_id == item.user_id, 
-#         Portfolio.ticker == item.ticker
-#     ).first()
-    
-#     # 2. If it doesn't exist, throw a 404 error
-#     if not db_item:
-#         raise HTTPException(status_code=404, detail="Stock not found in portfolio")
-        
-#     # 3. Delete it and save changes
-#     db.delete(db_item)
-#     db.commit()
-    
-#     return {"status": "success", "message": f"{item.ticker} removed from portfolio"}
-
-# @app.delete("/api/watchlist/remove")
-# def remove_from_watchlist(item: RemoveItemRequest, db: Session = Depends(get_db)):
-#     # 1. Look for the exact stock watched by this specific user
-#     db_item = db.query(Watchlist).filter(
-#         Watchlist.user_id == item.user_id, 
-#         Watchlist.ticker == item.ticker
-#     ).first()
-    
-#     # 2. If it doesn't exist, throw a 404 error
-#     if not db_item:
-#         raise HTTPException(status_code=404, detail="Stock not found in watchlist")
-        
-#     # 3. Delete it and save changes
-#     db.delete(db_item)
-#     db.commit()
-    
-#     return {"status": "success", "message": f"{item.ticker} removed from watchlist"}
-
-# @app.get("/api/user/{user_id}/assets")
-# def get_user_assets(user_id: int, db: Session = Depends(get_db)):
-#     """Returns both the user's Portfolio and Watchlist in one call."""
-    
-#     # 1. Get Portfolio from DB
-#     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == user_id).all()
-#     # 2. Get Watchlist from DB
-#     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == user_id).all()
-    
-#     portfolio_list = []
-#     watchlist_list = []
-    
-#     # --- Helper logic: We need to attach the LIVE PRICE to these saved tickers ---
-#     processed_dir = "data/processed"
-    
-#     def get_live_stats(ticker):
-#         file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-#         try:
-#             df = pd.read_csv(file_path)
-#             latest = df.iloc[-1]
-#             prev = df.iloc[-2] if len(df) > 1 else latest
-#             price = float(latest['close'])
-#             prev_price = float(prev['close'])
-#             change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
-            
-#             # Extract last 7 days of closing prices for the sparkline chart!
-#             spark_data = df['close'].tail(7).tolist()
-            
-#             return price, change_pct, spark_data
-#         except:
-#             return 0.0, 0.0, [0.0]*7
-
-#     # Build Portfolio Output
-#     for p in portfolio_db:
-#         live_price, change_pct, spark = get_live_stats(p.ticker)
-#         portfolio_list.append({
-#             "id": p.id,
-#             "ticker": p.ticker,
-#             "quantity": float(p.quantity),
-#             "avg_buy_price": float(p.average_buy_price),
-#             "live_price": live_price,
-#             "change_pct": change_pct,
-#             "spark_data": spark
-#         })
-        
-#     # Build Watchlist Output
-#     for w in watchlist_db:
-#         live_price, change_pct, spark = get_live_stats(w.ticker)
-#         watchlist_list.append({
-#             "id": w.id,
-#             "ticker": w.ticker,
-#             "live_price": live_price,
-#             "change_pct": change_pct,
-#             "spark_data": spark
-#         })
-
-#     return {
-#         "status": "success",
-#         "data": {
-#             "portfolio": portfolio_list,
-#             "watchlist": watchlist_list
-#         }
-
-#     }
-from fastapi import FastAPI, Depends, HTTPException, status
-import pandas as pd
-import numpy as np
+import hashlib
+import hmac
 import os
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
-from passlib.context import CryptContext
-from pydantic import BaseModel
-import random
-import uuid
+import re
+import secrets
 import smtplib
-from google import genai
-from google.genai import types
-import glob
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from typing import Optional
-from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
 import jwt
 from dotenv import load_dotenv
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from google import genai
+from google.genai import types
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
-from src.api.database import PasswordReset, get_db, User, Portfolio, Watchlist
-
-# --- 🚨 ENVIRONMENT & SECURITY SETUP 🚨 ---
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 Days
-
-if not GEMINI_API_KEY:
-    raise RuntimeError("Missing GEMINI_API_KEY in environment")
-if not SECRET_KEY:
-    raise RuntimeError("Missing JWT_SECRET_KEY in environment")
-
-security = HTTPBearer()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Initialize the API
-app = FastAPI(
-    title="HybStockAdvisor API",
-    description="Backend API serving ML predictions for the Nigerian Stock Market",
-    version="1.0.0"
+from src.api.database import (
+    InviteToken,
+    MarketDailyBar,
+    PasswordReset,
+    PaperSignal,
+    Portfolio,
+    User,
+    Watchlist,
+    get_db,
+)
+from src.api.market_data import (
+    NGX_TIMEZONE,
+    bar_as_dict,
+    is_stale,
+    latest_bar,
+    market_data_enabled,
+    market_data_source,
+    market_summary,
+    published_signal,
+    release_approval,
+    recent_bars,
+    signal_as_dict,
+)
+from src.api.schemas import (
+    ForecastResponse,
+    InsightsResponse,
+    MarketSummaryResponse,
 )
 
-# --- 🛡️ THE BOUNCER (JWT MIDDLEWARE) 🛡️ ---
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+load_dotenv()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    token = credentials.credentials
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer(auto_error=False)
+
+app = FastAPI(
+    title="HybStockAdvisor API",
+    description="Authenticated research API for NGX daily market data",
+    version="2.0.0",
+)
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _registration_allowlist() -> set[str]:
+    configured = {
+        email.strip().lower()
+        for email in os.getenv("INVITED_USER_EMAILS", "").split(",")
+        if email.strip()
+    }
+    owner_email = os.getenv("INVESTO_PERSONAL_OWNER_EMAIL", "").strip().lower()
+    if owner_email:
+        configured.add(owner_email)
+    return configured
+
+
+def _market_data_allowed_for_user(user: User) -> bool:
+    """The free Investo tier is restricted to the owner's personal project."""
+    if os.getenv("INVESTO_API", "").strip() or os.getenv("INVESTO_API_KEY", "").strip():
+        owner_email = os.getenv("INVESTO_PERSONAL_OWNER_EMAIL", "").strip().lower()
+        return bool(owner_email) and user.email.strip().lower() == owner_email
+    return market_data_enabled()
+
+
+def create_access_token(user: User) -> str:
+    if len(JWT_SECRET_KEY) < 32:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is not configured on this server",
+        )
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user.id),
+        "user_id": user.id,
+        "iat": now,
+        "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+) -> User:
+    if credentials is None or not JWT_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired. Please log in again.")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
-        
+        payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp", "iat", "sub"]},
+        )
+        user_id = int(payload["user_id"])
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Session is invalid or expired") from None
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Account is no longer available")
     return user
 
-# --- PYDANTIC MODELS ---
+
+def _require_exchange(exchange: str) -> str:
+    normalized = exchange.strip().upper()
+    if normalized != "NGX":
+        raise HTTPException(status_code=404, detail="This exchange is not available yet")
+    return normalized
+
+
 class UserCreate(BaseModel):
-    first_name: str
-    last_name: str
-    username: str
-    email: str
-    password: str
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    username: str = Field(min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    invite_code: Optional[str] = Field(default=None, min_length=20, max_length=128)
+
 
 class UserLogin(BaseModel):
-    identifier: str  
-    password: str
-    
+    identifier: str = Field(min_length=1, max_length=150)
+    password: str = Field(min_length=1, max_length=128)
+
+
 class PortfolioCreate(BaseModel):
-    user_id: int
-    ticker: str
-    quantity: float
-    average_buy_price: float
+    # Kept optional for old clients. The authenticated user remains authoritative.
+    user_id: Optional[int] = None
+    ticker: str = Field(min_length=1, max_length=30)
+    quantity: float = Field(gt=0)
+    average_buy_price: float = Field(gt=0)
+
 
 class WatchlistCreate(BaseModel):
-    user_id: int
-    ticker: str
+    user_id: Optional[int] = None
+    ticker: str = Field(min_length=1, max_length=30)
 
-class ForgotPasswordRequest(BaseModel):
-    email: str
-
-class VerifyOtpRequest(BaseModel):
-    email: str
-    otp: str
-
-class ResetPasswordRequest(BaseModel):
-    reset_token: str
-    new_password: str
-
-class ChatMessage(BaseModel):
-    text: str
-    current_ticker: Optional[str] = None  
 
 class RemoveItemRequest(BaseModel):
-    user_id: int
-    ticker: str
+    user_id: Optional[int] = None
+    ticker: str = Field(min_length=1, max_length=30)
 
-# --- ENDPOINTS ---
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str = Field(min_length=20, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChatMessage(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    current_ticker: Optional[str] = Field(default=None, max_length=30)
+
+
 @app.get("/")
-def read_root():
-    return {"status": "Online", "message": "Welcome to the HybStockAdvisor Engine"}
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "market_data_configured": market_data_enabled(),
+    }
 
-@app.post("/api/auth/register")
+
+@app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == user.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    existing_username = db.query(User).filter(User.username == user.username).first()
-    if existing_username:
-        raise HTTPException(status_code=400, detail="Username already taken")
-    hashed_password = pwd_context.hash(user.password)
-    new_user = User(
-        first_name=user.first_name, last_name=user.last_name,
-        username=user.username, email=user.email, password_hash=hashed_password
+    email = str(user.email).strip().lower()
+    username = user.username.strip()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="Email already registered")
+    if db.query(User).filter(User.username == username).first():
+        raise HTTPException(status_code=409, detail="Username already taken")
+
+    invitation = None
+    invite_code = (user.invite_code or "").strip()
+    if invite_code:
+        invitation = (
+            db.query(InviteToken)
+            .filter(InviteToken.token_hash == _hash(invite_code))
+            .with_for_update()
+            .first()
+        )
+        if (
+            invitation is None
+            or invitation.used_at is not None
+            or invitation.expires_at <= _utc_now_naive()
+        ):
+            raise HTTPException(status_code=403, detail="Invitation code is invalid or expired")
+    elif email not in _registration_allowlist():
+        raise HTTPException(status_code=403, detail="Registration is by invitation only")
+
+    created = User(
+        first_name=user.first_name.strip(),
+        last_name=user.last_name.strip(),
+        username=username,
+        email=email,
+        password_hash=pwd_context.hash(user.password),
     )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return {"status": "success", "message": "Account created successfully", "data": {"user_id": new_user.id, "username": new_user.username}}
+    if invitation is not None:
+        invitation.used_at = _utc_now_naive()
+    db.add(created)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Account could not be created") from None
+    db.refresh(created)
+    return {
+        "status": "success",
+        "message": "Account created successfully",
+        "data": {"user_id": created.id, "username": created.username},
+    }
+
 
 @app.post("/api/auth/login")
 def login_user(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(or_(User.email == user.identifier, User.username == user.identifier)).first()
+    identifier = user.identifier.strip()
+    db_user = (
+        db.query(User)
+        .filter(or_(User.email == identifier.lower(), User.username == identifier))
+        .first()
+    )
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid identifier or password")
-        
-    access_token = create_access_token(data={"sub": db_user.email, "user_id": db_user.id})
+        raise HTTPException(status_code=401, detail="Invalid username/email or password")
     return {
         "status": "success",
         "message": "Login successful",
-        "token": access_token, 
+        "token": create_access_token(db_user),
         "user_data": {
-            "id": db_user.id, "first_name": db_user.first_name,
-            "last_name": db_user.last_name, "username": db_user.username, "email": db_user.email
-        }
+            "id": db_user.id,
+            "first_name": db_user.first_name,
+            "last_name": db_user.last_name,
+            "username": db_user.username,
+            "email": db_user.email,
+        },
     }
 
-@app.get("/api/insights/{ticker}")
-def get_insights(ticker: str):
-    file_path = f"data/processed/{ticker}_SAFETY_INDEX.csv"
-    if not os.path.exists(file_path):
-        return {"status": "error", "error": "Data not found"}
-    df = pd.read_csv(file_path)
-    latest = df.iloc[-1].replace([np.inf, -np.inf], np.nan).fillna(0)
-    
-    rec = latest['Recommendation']
-    rsi = float(latest['RSI'])
-    ema50 = float(latest['EMA_50'])
-    close = float(latest['close'])
-    
-    explanation = f"Our LightGBM model has analyzed {ticker}. "
-    if close > ema50: explanation += f"The asset is currently trading at ₦{close:.2f}, which is above its 50-day moving average (₦{ema50:.2f}), indicating underlying bullish momentum. "
-    else: explanation += f"The asset is trading at ₦{close:.2f}, below its 50-day moving average (₦{ema50:.2f}), showing bearish pressure. "
-        
-    if rsi > 70: explanation += f"However, with an RSI of {rsi:.1f}, the stock is technically overbought and may face an imminent price correction."
-    elif rsi < 30: explanation += f"With an RSI of {rsi:.1f}, the stock is currently oversold, presenting a potential discounted entry opportunity."
-    else: explanation += f"The RSI sits in neutral territory at {rsi:.1f}, suggesting stable price consolidation."
 
-    rsi_impact = (50 - rsi) / 50 
-    ema_pct_diff = (close - ema50) / ema50
-    ema_impact = max(-1.0, min(1.0, ema_pct_diff * 10)) 
-    
+@app.get("/api/summary", response_model=MarketSummaryResponse)
+def get_market_summary(
+    exchange: str = Query(default="NGX", min_length=3, max_length=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not _market_data_allowed_for_user(current_user):
+        return {
+            "status": "success",
+            "data": [],
+            "meta": {
+                "data_available": False,
+                "reason": "market_data_not_enabled_for_this_account",
+                "exchange": _require_exchange(exchange),
+                "as_of": None,
+                "stale": True,
+            },
+        }
+    return market_summary(db, _require_exchange(exchange))
+
+
+@app.get("/api/forecast/{ticker}", response_model=ForecastResponse)
+def get_forecast(
+    ticker: str,
+    exchange: str = Query(default="NGX", min_length=3, max_length=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    exchange = _require_exchange(exchange)
+    normalized_ticker = ticker.strip().upper()
+    if len(normalized_ticker) > 30 or not normalized_ticker:
+        raise HTTPException(status_code=422, detail="Invalid stock symbol")
+    allowed = _market_data_allowed_for_user(current_user)
+    bars = recent_bars(db, normalized_ticker, limit=120, exchange=exchange) if allowed else []
+    latest = bars[-1] if bars else None
+    signal_row = published_signal(db, normalized_ticker, exchange, latest)
+    signal = signal_as_dict(signal_row, latest, release_approval(db, signal_row))
+    return {
+        "status": "success",
+        "data": [bar_as_dict(bar) for bar in bars],
+        "meta": {
+            "data_available": bool(bars),
+            "exchange": exchange,
+            "symbol": normalized_ticker,
+            "currency": latest.currency if latest else "NGN",
+            "as_of": latest.source_as_of.isoformat() if latest else None,
+            "source": latest.source if latest else None,
+            "stale": is_stale(latest.trade_date) if latest else True,
+        },
+        "signal": signal,
+    }
+
+
+@app.get("/api/insights/{ticker}", response_model=InsightsResponse)
+def get_insights(
+    ticker: str,
+    exchange: str = Query(default="NGX", min_length=3, max_length=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    exchange = _require_exchange(exchange)
+    normalized_ticker = ticker.strip().upper()
+    current = (
+        latest_bar(db, normalized_ticker, exchange)
+        if _market_data_allowed_for_user(current_user)
+        else None
+    )
+    signal_row = published_signal(db, normalized_ticker, exchange, current)
+    signal = signal_as_dict(signal_row, current, release_approval(db, signal_row))
+    if current is None:
+        explanation = "Verified NGX closing data is not available yet. No stock signal is being shown."
+    elif is_stale(current.trade_date):
+        explanation = "The latest verified closing data is stale. No stock signal is being shown."
+    elif signal["available"]:
+        explanation = (
+            "A reviewed research signal is available for the stated horizon. "
+            "It is uncertain and is not a personalized instruction to trade."
+        )
+    else:
+        explanation = (
+            "Verified closing data is available, but no model signal has passed review. "
+            "This page provides market context only."
+        )
     return {
         "status": "success",
         "data": {
-            "ticker": ticker, "recommendation": rec, "explanation": explanation,
-            "ai_confidence": float(latest['AI_Score']), "market_stability": float(latest['Stability_Score']),
-            "public_sentiment": float(latest['Sentiment_Rescaled']), "safety_index": float(latest['Safety_Index']),
-            "rsi_impact": float(rsi_impact), "ema_impact": float(ema_impact)
-        }
+            "ticker": normalized_ticker,
+            "exchange": exchange,
+            "currency": current.currency if current else "NGN",
+            "price": float(current.close) if current else None,
+            "data_as_of": current.source_as_of.isoformat() if current else None,
+            "data_source": current.source if current else None,
+            "data_stale": is_stale(current.trade_date) if current else True,
+            "recommendation": signal["direction"],
+            "signal": signal,
+            "ai_confidence": signal.get("probability_positive"),
+            "market_stability": None,
+            "public_sentiment": None,
+            "safety_index": None,
+            "rsi_impact": None,
+            "ema_impact": None,
+            "evidence": signal["evidence"],
+            "explanation": explanation,
+        },
     }
 
-@app.get("/api/forecast/{ticker}")
-def get_forecast(ticker: str):
-    file_path = f"data/processed/{ticker}_SAFETY_INDEX.csv"
-    if not os.path.exists(file_path):
-        return {"status": "error", "error": "Data not found. Please run the AI pipeline first."}
-    try:
-        df = pd.read_csv(file_path)
-        df = df.replace([np.inf, -np.inf], np.nan)
-        df = df.where(pd.notnull(df), None)
-        recent_data = df.tail(5).to_dict(orient="records")
-        return {"status": "success", "data": recent_data}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-@app.get("/api/summary")
-def get_market_summary():
-    processed_dir = "data/processed"
-    summary = []
-    if not os.path.exists(processed_dir):
-        return {"status": "error", "message": "No processed data found"}
-        
-    for file in os.listdir(processed_dir):
-        if file.endswith("_SAFETY_INDEX.csv"):
-            ticker = file.replace("_SAFETY_INDEX.csv", "")
-            try:
-                df = pd.read_csv(os.path.join(processed_dir, file))
-                if not df.empty:
-                    latest = df.iloc[-1]
-                    prev = df.iloc[-2] if len(df) > 1 else latest
-                    price = float(latest['close'])
-                    prev_price = float(prev['close'])
-                    change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
-                    
-                    latest_dict = latest.to_dict()
-                    company_name = latest_dict.get('Name', f"{ticker} Plc")
-                    market_cap = latest_dict.get('Market_Cap', "--")
-                    summary.append({
-                        "symbol": ticker, "name": str(company_name), "market_cap": str(market_cap),
-                        "price": price, "change_pct": change_pct
-                    })
-            except Exception:
-                continue
-    return {"status": "success", "data": summary}
 
 @app.post("/api/portfolio/add")
-def add_to_portfolio(item: PortfolioCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    new_entry = Portfolio(
-        user_id=current_user.id, ticker=item.ticker, quantity=item.quantity, average_buy_price=item.average_buy_price
+def add_to_portfolio(
+    item: PortfolioCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if item.user_id is not None and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    ticker = item.ticker.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,29}", ticker):
+        raise HTTPException(status_code=422, detail="Enter a valid NGX symbol")
+    if db.query(Portfolio).filter_by(user_id=current_user.id, ticker=ticker).first():
+        raise HTTPException(status_code=409, detail="Stock is already in your portfolio")
+    db.add(
+        Portfolio(
+            user_id=current_user.id,
+            ticker=ticker,
+            quantity=item.quantity,
+            average_buy_price=item.average_buy_price,
+        )
     )
-    db.add(new_entry)
     db.commit()
     return {"status": "success"}
+
 
 @app.delete("/api/portfolio/remove")
-def remove_from_portfolio(item: RemoveItemRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.id != item.user_id: raise HTTPException(status_code=403, detail="Not authorized")
-    db_item = db.query(Portfolio).filter(Portfolio.user_id == item.user_id, Portfolio.ticker == item.ticker).first()
-    if not db_item: raise HTTPException(status_code=404, detail="Stock not found in portfolio")
-    db.delete(db_item)
+def remove_from_portfolio(
+    item: RemoveItemRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if item.user_id is not None and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    row = (
+        db.query(Portfolio)
+        .filter(Portfolio.user_id == current_user.id, Portfolio.ticker == item.ticker.upper())
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Stock not found in portfolio")
+    db.delete(row)
     db.commit()
     return {"status": "success"}
+
 
 @app.post("/api/watchlist/add")
-def add_to_watchlist(item: WatchlistCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.id != item.user_id: raise HTTPException(status_code=403, detail="Not authorized")
-    existing = db.query(Watchlist).filter_by(user_id=item.user_id, ticker=item.ticker).first()
-    if existing: return {"status": "error", "detail": "Already in watchlist"}
-    new_entry = Watchlist(user_id=item.user_id, ticker=item.ticker)
-    db.add(new_entry)
+def add_to_watchlist(
+    item: WatchlistCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if item.user_id is not None and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    ticker = item.ticker.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,29}", ticker):
+        raise HTTPException(status_code=422, detail="Enter a valid NGX symbol")
+    if db.query(Watchlist).filter_by(user_id=current_user.id, ticker=ticker).first():
+        return {"status": "error", "detail": "Already in watchlist"}
+    db.add(Watchlist(user_id=current_user.id, ticker=ticker))
     db.commit()
     return {"status": "success"}
+
 
 @app.delete("/api/watchlist/remove")
-def remove_from_watchlist(item: RemoveItemRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.id != item.user_id: raise HTTPException(status_code=403, detail="Not authorized")
-    db_item = db.query(Watchlist).filter(Watchlist.user_id == item.user_id, Watchlist.ticker == item.ticker).first()
-    if not db_item: raise HTTPException(status_code=404, detail="Stock not found in watchlist")
-    db.delete(db_item)
+def remove_from_watchlist(
+    item: RemoveItemRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if item.user_id is not None and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    row = (
+        db.query(Watchlist)
+        .filter(Watchlist.user_id == current_user.id, Watchlist.ticker == item.ticker.upper())
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Stock not found in watchlist")
+    db.delete(row)
     db.commit()
     return {"status": "success"}
 
+
+def _asset_market_values(
+    db: Session, ticker: str, *, allow_market_data: bool = True
+) -> tuple[float | None, float | None, list[float], str | None, str | None, str | None, bool]:
+    if not allow_market_data or not market_data_enabled():
+        return None, None, [], None, None, None, True
+    bars = recent_bars(db, ticker, limit=7)
+    if not bars:
+        return None, None, [], None, None, None, True
+    price = float(bars[-1].close)
+    previous = float(bars[-2].close) if len(bars) > 1 else price
+    change = ((price - previous) / previous) * 100 if previous else 0.0
+    return (
+        price,
+        change,
+        [float(bar.close) for bar in bars],
+        bars[-1].currency,
+        bars[-1].source_as_of.isoformat(),
+        bars[-1].source,
+        is_stale(bars[-1].trade_date),
+    )
+
+
 @app.get("/api/user/{user_id}/assets")
-def get_user_assets(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.id != user_id: raise HTTPException(status_code=403, detail="Not authorized to view this data")
-    portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == user_id).all()
-    watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == user_id).all()
-    portfolio_list, watchlist_list = [], []
-    processed_dir = "data/processed"
-    
-    def get_live_stats(ticker):
-        try:
-            df = pd.read_csv(os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv"))
-            latest = df.iloc[-1]
-            prev = df.iloc[-2] if len(df) > 1 else latest
-            price = float(latest['close'])
-            prev_price = float(prev['close'])
-            change_pct = ((price - prev_price) / prev_price) * 100 if prev_price != 0 else 0.0
-            spark_data = df['close'].tail(7).tolist()
-            return price, change_pct, spark_data
-        except:
-            return 0.0, 0.0, [0.0]*7
+def get_user_assets(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this data")
+    portfolio_rows = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
+    watchlist_rows = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
+    portfolio = []
+    watchlist = []
+    allow_market_data = _market_data_allowed_for_user(current_user)
+    for row in portfolio_rows:
+        price, change, spark, currency, as_of, source, stale = _asset_market_values(
+            db, row.ticker, allow_market_data=allow_market_data
+        )
+        portfolio.append(
+            {
+                "id": row.id,
+                "ticker": row.ticker,
+                "quantity": float(row.quantity),
+                "avg_buy_price": float(row.average_buy_price),
+                "live_price": price,
+                "change_pct": change,
+                "spark_data": spark,
+                "currency": currency or "NGN",
+                "exchange": "NGX",
+                "as_of": as_of,
+                "source": source,
+                "stale": stale,
+            }
+        )
+    for row in watchlist_rows:
+        price, change, spark, currency, as_of, source, stale = _asset_market_values(
+            db, row.ticker, allow_market_data=allow_market_data
+        )
+        watchlist.append(
+            {
+                "id": row.id,
+                "ticker": row.ticker,
+                "live_price": price,
+                "change_pct": change,
+                "spark_data": spark,
+                "currency": currency or "NGN",
+                "exchange": "NGX",
+                "as_of": as_of,
+                "source": source,
+                "stale": stale,
+            }
+        )
+    return {
+        "status": "success",
+        "data": {
+            "portfolio": portfolio,
+            "watchlist": watchlist,
+            "meta": {
+                "market_data_available": allow_market_data and market_data_enabled(),
+                "source": market_data_source() if allow_market_data else None,
+            },
+        },
+    }
 
-    for p in portfolio_db:
-        live_price, change_pct, spark = get_live_stats(p.ticker)
-        portfolio_list.append({
-            "id": p.id, "ticker": p.ticker, "quantity": float(p.quantity), "avg_buy_price": float(p.average_buy_price),
-            "live_price": live_price, "change_pct": change_pct, "spark_data": spark
-        })
-        
-    for w in watchlist_db:
-        live_price, change_pct, spark = get_live_stats(w.ticker)
-        watchlist_list.append({
-            "id": w.id, "ticker": w.ticker, "live_price": live_price, "change_pct": change_pct, "spark_data": spark
-        })
 
-    return {"status": "success", "data": {"portfolio": portfolio_list, "watchlist": watchlist_list}}
+def _chat_context(
+    db: Session, user: User, ticker: str | None, *, allow_market_data: bool = True
+) -> str:
+    owned = db.query(Portfolio).filter(Portfolio.user_id == user.id).all()
+    watched = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+    symbols = {row.ticker.upper() for row in owned}
+    symbols.update(row.ticker.upper() for row in watched)
+    if ticker:
+        symbols.add(ticker.strip().upper())
+    if not allow_market_data or not market_data_enabled():
+        return "Verified market data is not configured. Do not claim current prices or signals."
+    lines = []
+    for symbol in sorted(symbols):
+        bar = latest_bar(db, symbol)
+        if bar is None:
+            lines.append(f"{symbol}: no verified market data is available.")
+            continue
+        lines.append(
+            f"{symbol}: NGN {float(bar.close):.4f}, closing date {bar.trade_date.isoformat()}, "
+            f"source {bar.source}, as of {bar.source_as_of.isoformat()}, stale={is_stale(bar.trade_date)}."
+        )
+        signal = published_signal(db, symbol, current_bar=bar)
+        if signal and signal.validation_status == "published" and not is_stale(bar.trade_date):
+            lines.append(
+                f"{symbol} reviewed research signal: {signal.direction}, "
+                f"{signal.horizon_sessions} trading days, model {signal.model_version}."
+            )
+        else:
+            lines.append(f"{symbol}: no reviewed directional signal is available.")
+    return "\n".join(lines) if lines else "No current stock context was selected."
 
-# --- CHATBOT ---
-# @app.post("/api/chat")
-# def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-#     user_message = req.text.upper()
-#     context_data = ""
-#     processed_dir = "data/processed"
-    
-#     portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
-#     watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
-    
-#     portfolio_tickers = [p.ticker for p in portfolio_db]
-#     watchlist_tickers = [w.ticker for w in watchlist_db]
-    
-#     target_tickers = set()
-#     if req.current_ticker: target_tickers.add(req.current_ticker.upper())
-#     for t in portfolio_tickers: target_tickers.add(t.upper())
-#     for t in watchlist_tickers: target_tickers.add(t.upper())
-        
-#     if os.path.exists(processed_dir):
-#         for file in os.listdir(processed_dir):
-#             if file.endswith("_SAFETY_INDEX.csv"):
-#                 ticker = file.replace("_SAFETY_INDEX.csv", "")
-#                 if ticker in user_message:
-#                     target_tickers.add(ticker)
 
-#     for ticker in target_tickers:
-#         file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-#         if os.path.exists(file_path):
-#             try:
-#                 df = pd.read_csv(file_path)
-#                 latest = df.iloc[-1]
-                
-#                 status_tags = []
-#                 if ticker == req.current_ticker: status_tags.append("Currently on screen")
-#                 if ticker in portfolio_tickers: status_tags.append("In User's Portfolio")
-#                 if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
-#                 tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
-                
-#                 context_data += f"\nData for {ticker}{tag_str}: Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-#                 context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-#                 context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
-#                 context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
-#             except Exception:
-#                 pass
-    
-#     system_prompt = f"""
-#     You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
-#     You are talking to {current_user.first_name}. Address them by name naturally.
-    
-#     Here is the live mathematical data for the stocks the user owns, watches, or is currently asking about:
-#     {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-#     CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
-#     If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
-#     1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
-#     2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
-#     3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
-#     4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
-    
-#     GENERAL RULES:
-#     - Never invent fake prices or metrics. Rely solely on the context provided.
-#     - If the data says "BUY", explain it using the positive metrics provided.
-#     - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
-#     - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer.
-#     """
-    
-#     try:
-#         client = genai.Client(api_key=GEMINI_API_KEY)
-#         response = client.models.generate_content(
-#             model='gemini-2.5-flash',
-#             contents=req.text,
-#             config=types.GenerateContentConfig(system_instruction=system_prompt)
-#         )
-#         return {"status": "success", "reply": response.text}
-        
-#     except Exception as e:
-#         error_msg = str(e)
-#         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-#             return {"status": "error", "reply": "I am receiving a lot of questions right now 🫩! Please wait about 60 seconds and ask me again."}
-#         return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
 @app.post("/api/chat")
-def ai_chat(req: ChatMessage, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    user_message = req.text.upper()
-    context_data = ""
-    processed_dir = "data/processed"
-    
-    # 1. Fetch the User's Database Records
-    portfolio_db = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
-    watchlist_db = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
-    
-    # 🚨 NEW: Create a dictionary mapping the ticker to their purchase data
-    portfolio_details = {p.ticker: {"quantity": p.quantity, "avg_buy_price": p.average_buy_price} for p in portfolio_db}
-    
-    portfolio_tickers = list(portfolio_details.keys())
-    watchlist_tickers = [w.ticker for w in watchlist_db]
-    
-    target_tickers = set()
-    if req.current_ticker: target_tickers.add(req.current_ticker.upper())
-    for t in portfolio_tickers: target_tickers.add(t.upper())
-    for t in watchlist_tickers: target_tickers.add(t.upper())
-        
-    if os.path.exists(processed_dir):
-        for file in os.listdir(processed_dir):
-            if file.endswith("_SAFETY_INDEX.csv"):
-                ticker = file.replace("_SAFETY_INDEX.csv", "")
-                if ticker in user_message:
-                    target_tickers.add(ticker)
-
-    # 2. Build the Data Context for Gemini
-    for ticker in target_tickers:
-        file_path = os.path.join(processed_dir, f"{ticker}_SAFETY_INDEX.csv")
-        if os.path.exists(file_path):
-            try:
-                df = pd.read_csv(file_path)
-                latest = df.iloc[-1]
-                
-                status_tags = []
-                if ticker == req.current_ticker: status_tags.append("Currently on screen")
-                if ticker in portfolio_tickers: status_tags.append("In User's Portfolio")
-                if ticker in watchlist_tickers: status_tags.append("In User's Watchlist")
-                tag_str = f" ({', '.join(status_tags)})" if status_tags else ""
-                
-                # 🚨 NEW: Inject their specific purchase data directly into Lexi's brain!
-                ownership_str = ""
-                if ticker in portfolio_details:
-                    qty = portfolio_details[ticker]['quantity']
-                    buy_price = portfolio_details[ticker]['avg_buy_price']
-                    current_price = float(latest['close'])
-                    
-                    # Calculate profit/loss percentage for her
-                    profit_loss = ((current_price - float(buy_price)) / float(buy_price)) * 100 if buy_price > 0 else 0
-                    ownership_str = f" [USER OWNS: {qty} units. BOUGHT AT: ₦{buy_price:.2f}. CURRENT RETURN: {profit_loss:.2f}%]"
-                
-                context_data += f"\nData for {ticker}{tag_str}:{ownership_str} Price=₦{latest['close']:.2f}, RSI={latest['RSI']:.1f}, "
-                context_data += f"50-EMA=₦{latest['EMA_50']:.2f}, 200-EMA=₦{latest['EMA_200']:.2f}, "
-                context_data += f"Recommendation={latest['Recommendation']}, Safety Index={latest['Safety_Index']:.1f}/100, "
-                context_data += f"AI Score={latest['AI_Score']:.1f}%, Market Stability={latest['Stability_Score']:.1f}%, Sentiment={latest['Sentiment_Rescaled']:.1f}%.\n"
-            except Exception:
-                pass
-    
+def ai_chat(
+    request: ChatMessage,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="The research assistant is not configured")
+    context = _chat_context(
+        db,
+        current_user,
+        request.current_ticker,
+        allow_market_data=_market_data_allowed_for_user(current_user),
+    )
     system_prompt = f"""
-    You are Lexi, a professional, smart, and friendly AI financial assistant for the NGX.
-    You are talking to {current_user.first_name}. Address them by name naturally.
-    
-    Here is the live mathematical data for the stocks the user owns, watches, or is currently asking about:
-    {context_data if context_data else 'No specific stock data pulled. Answer general finance questions.'}
-    
-    CRITICAL RULES ON HOW TO EXPLAIN THE "SAFETY INDEX":
-    If the user asks how the Safety Index or recommendation is calculated, YOU MUST EXPLAIN THIS EXACT FORMULA:
-    1. AI Confidence (50% weight): Uses a deeply optimized LightGBM Machine Learning model to predict price action.
-    2. Market Stability (30% weight): Uses the 14-day RSI (Relative Strength Index) to measure volatility.
-    3. Public Sentiment (20% weight): Uses a custom "Naija-FinBERT" Natural Language Processing model to analyze news and social media sentiment.
-    4. Financial Guardrails: The final score is penalized if the stock is overbought (RSI > 70) or in a bearish Death Cross (50-EMA < 200-EMA), and boosted for oversold conditions or Golden Crosses.
-    
-    GENERAL RULES:
-    - CATEGORY RECOGNITION: The system outputs "STRONG BUY", "BUY", "HOLD", "SELL", and "STRONG SELL". You MUST recognize and proudly use the "STRONG BUY" category if the data says so. Never claim your system only uses Buy/Hold/Sell.
-    - If the data says "STRONG BUY" or "BUY", explain the bullish momentum using the positive metrics provided.
-    - Never invent fake prices or metrics. Rely solely on the context provided.
-    - ABSOLUTELY NO MARKDOWN. Do not use asterisks (**) for bolding. Output plain text only.
-    - Write short but detailed explanations. Use the data to back up every claim you make. Avoid generic statements.
-    - If the user asks about their portfolio or which of their stocks are best, analyze the data provided above that is tagged "In User's Portfolio" to give them an accurate, mathematical answer. You can reference their exact profit/loss.
-    """
-    
+You are Lexi, a calm research companion for HybStockAdvisor.
+The user's name is {current_user.first_name}. Use it naturally, not on every reply.
+Use only the verified app data below for current prices, dates, or published signals:
+{context}
+
+Rules:
+- Never invent prices, metrics, news, recommendations, or claims that data is live.
+- Say when data is missing or stale and state the data date when using a price.
+- A published signal is uncertain research, not a personalized instruction or a promise.
+- Do not tell the user to buy, sell, or place a trade. Explain evidence and risks neutrally.
+- If asked about general finance, label the answer as general information, not current market data.
+- Keep the answer concise and readable.
+"""
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=req.text,
-            config=types.GenerateContentConfig(system_instruction=system_prompt)
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            contents=request.text,
+            config=types.GenerateContentConfig(system_instruction=system_prompt),
         )
-        return {"status": "success", "reply": response.text}
+    except Exception:
+        raise HTTPException(status_code=502, detail="The research assistant is temporarily unavailable") from None
+    if not response.text:
+        raise HTTPException(status_code=502, detail="The research assistant returned an empty response")
+    return {"status": "success", "reply": response.text}
 
-    except Exception as e:
-        error_msg = str(e)
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            return {"status": "error", "reply": "I am receiving a lot of questions right now! Please wait about 60 seconds and ask me again."}
-        return {"status": "error", "reply": "Sorry, my AI servers are currently resting. Try again in a moment!"}
-# --- Password Reset Functions ---
-def send_otp_email(receiver_email: str, user_first_name: str, otp_code: str):
-    SENDER_EMAIL = os.getenv("EMAIL_SENDER", "your_email@gmail.com")
-    SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
-    print(f"\n{'='*50}\n📧 MOCK EMAIL SENT TO: {receiver_email}\nOTP CODE: {otp_code}\n{'='*50}\n")
-    # Uncomment to send real emails
+
+def _smtp_configured() -> bool:
+    return all(
+        os.getenv(name)
+        for name in ("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "EMAIL_FROM")
+    )
+
+
+def _send_password_reset_email(email: str, first_name: str, otp: str) -> None:
+    message = EmailMessage()
+    message["Subject"] = "HybStockAdvisor password reset"
+    message["From"] = os.environ["EMAIL_FROM"]
+    message["To"] = email
+    message.set_content(
+        f"Hello {first_name},\n\nYour password reset code is {otp}. "
+        "It expires in 15 minutes. If you did not request this, ignore this email."
+    )
+    host = os.environ["SMTP_HOST"]
+    port = int(os.getenv("SMTP_PORT", "587"))
+    with smtplib.SMTP(host, port, timeout=15) as smtp:
+        if os.getenv("SMTP_STARTTLS", "true").lower() == "true":
+            smtp.starttls()
+        smtp.login(os.environ["SMTP_USERNAME"], os.environ["SMTP_PASSWORD"])
+        smtp.send_message(message)
+
 
 @app.post("/api/auth/forgot-password")
-def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == req.email).first()
-    if not user: raise HTTPException(status_code=404, detail="Account not found")
-    otp = str(random.randint(100000, 999999))
-    expiry = datetime.now() + timedelta(minutes=15)
-    existing_reset = db.query(PasswordReset).filter(PasswordReset.email == req.email).first()
-    if existing_reset:
-        existing_reset.otp, existing_reset.expires_at, existing_reset.reset_token = otp, expiry, None
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    if not _smtp_configured():
+        raise HTTPException(status_code=503, detail="Password reset email is not configured")
+    user = db.query(User).filter(User.email == str(request.email).lower()).first()
+    if user is None:
+        return {"status": "success", "message": "If the account exists, a reset code was sent"}
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    reset = db.query(PasswordReset).filter(PasswordReset.email == user.email).first()
+    if reset is None:
+        reset = PasswordReset(
+            email=user.email,
+            otp="000000",  # legacy column retained; the real code is stored as a digest.
+            otp_hash=_hash(otp),
+            failed_attempts=0,
+            reset_token=None,
+            expires_at=_utc_now_naive() + timedelta(minutes=15),
+        )
+        db.add(reset)
     else:
-        db.add(PasswordReset(email=req.email, otp=otp, expires_at=expiry))
-    db.commit()
-    send_otp_email(user.email, user.first_name, otp)
-    return {"status": "success", "message": "OTP sent to email"}
+        reset.otp = "000000"
+        reset.otp_hash = _hash(otp)
+        reset.failed_attempts = 0
+        reset.reset_token = None
+        reset.expires_at = _utc_now_naive() + timedelta(minutes=15)
+    try:
+        _send_password_reset_email(user.email, user.first_name, otp)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=502, detail="Could not send the password reset email") from None
+    return {"status": "success", "message": "If the account exists, a reset code was sent"}
+
 
 @app.post("/api/auth/verify-reset-otp")
-def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
-    reset_record = db.query(PasswordReset).filter(PasswordReset.email == req.email).first()
-    if not reset_record or reset_record.otp != req.otp: raise HTTPException(status_code=400, detail="Invalid OTP")
-    if datetime.now() > reset_record.expires_at: raise HTTPException(status_code=400, detail="OTP has expired")
-    secure_token = str(uuid.uuid4())
-    reset_record.reset_token = secure_token
+def verify_otp(request: VerifyOtpRequest, db: Session = Depends(get_db)):
+    email = str(request.email).lower()
+    reset = db.query(PasswordReset).filter(PasswordReset.email == email).with_for_update().first()
+    if reset is None:
+        raise HTTPException(status_code=400, detail="Reset code is invalid or expired")
+    if reset.expires_at <= _utc_now_naive() or reset.failed_attempts >= 5:
+        db.delete(reset)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Reset code is invalid or expired")
+    otp_matches = (
+        hmac.compare_digest(reset.otp_hash, _hash(request.otp))
+        if reset.otp_hash
+        else hmac.compare_digest(reset.otp, request.otp)
+    )
+    if not otp_matches:
+        reset.failed_attempts = (reset.failed_attempts or 0) + 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Reset code is invalid or expired")
+    reset_token = secrets.token_urlsafe(32)
+    reset.reset_token = _hash(reset_token)
     db.commit()
-    return {"status": "success", "reset_token": secure_token}
+    return {"status": "success", "reset_token": reset_token}
+
 
 @app.post("/api/auth/reset-password")
-def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
-    reset_record = db.query(PasswordReset).filter(PasswordReset.reset_token == req.reset_token).first()
-    if not reset_record: raise HTTPException(status_code=400, detail="Invalid or expired reset session")
-    user = db.query(User).filter(User.email == reset_record.email).first()
-    user.password_hash = pwd_context.hash(req.new_password)
-    db.delete(reset_record)
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    reset = db.query(PasswordReset).filter(
+        PasswordReset.reset_token == _hash(request.reset_token)
+    ).first()
+    if reset is None or reset.expires_at <= _utc_now_naive():
+        raise HTTPException(status_code=400, detail="Reset session is invalid or expired")
+    user = db.query(User).filter(User.email == reset.email).first()
+    if user is None:
+        db.delete(reset)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Reset session is invalid or expired")
+    user.password_hash = pwd_context.hash(request.new_password)
+    db.delete(reset)
     db.commit()
     return {"status": "success", "message": "Password has been reset successfully"}

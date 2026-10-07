@@ -98,7 +98,7 @@ Just add your Render URL and set interval to 5-10 minutes.
 1. **First**, update the `RENDER_URL` in `health_check.py` with your actual Render URL:
 
 ```python
-RENDER_URL = "https://hybstockadvisor.onrender.com"  # Update this
+RENDER_URL = "https://hybstockadvisor-us.onrender.com"  # Update this
 ```
 
 Or set environment variable:
