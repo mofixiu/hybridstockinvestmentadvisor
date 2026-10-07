@@ -146,6 +146,9 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=401, detail="Account is no longer available")
+    # Release the database connection after the short authentication lookup.
+    # The route may make slower provider or AI calls before it needs the DB again.
+    db.commit()
     return user
 
 
@@ -512,6 +515,9 @@ def get_user_assets(
         raise HTTPException(status_code=403, detail="Not authorized to view this data")
     portfolio_rows = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
     watchlist_rows = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).all()
+    # These rows are fully loaded (expire_on_commit=False). Release the DB
+    # connection before making one or more potentially slow market-data calls.
+    db.commit()
     portfolio = []
     watchlist = []
     allow_market_data = _market_data_allowed_for_user(current_user)
